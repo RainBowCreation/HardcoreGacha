@@ -3,13 +3,13 @@ services:
   postgres:
     image: postgres:latest
     container_name: postgres
-    hostname: postgres
+    hostname: ${DATABASE_HOSTNAME}
     ports:
       - 5432:5432
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: helpdesk
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE}
     volumes:
       - postgres-data3:/var/lib/postgresql/data
     restart: unless-stopped
