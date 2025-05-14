@@ -7,14 +7,14 @@ type tokenInfomation = {
 export function generateTokens(user: tokenInfomation) {
   const { username } = user;
   const accessToken = jwt.sign(
-    { username: username }, // payload
-    process.env.ACCESS_TOKEN_SECRET as string, // กำหนด secret
-    { expiresIn: "3m", algorithm: "HS256" } // อายุ เเละ algorithm ในการสร้าง jwt
+    { username: username },
+    process.env.ACCESS_TOKEN_SECRET as string, 
+    { expiresIn: "1h", algorithm: "HS256" }
   );
   const refreshToken = jwt.sign(
-    { username: username }, // payload
-    process.env.REFRESH_TOKEN_SECRET as string, // กำหนด secret
-    { expiresIn: "1d", algorithm: "HS256" } // อายุ เเละ algorithm ในการสร้าง jwt
+    { username: username },
+    process.env.REFRESH_TOKEN_SECRET as string,
+    { expiresIn: "7d", algorithm: "HS256" }
   );
   return { accessToken, refreshToken };
 }

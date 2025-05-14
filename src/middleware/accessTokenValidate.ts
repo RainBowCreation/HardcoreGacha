@@ -3,11 +3,14 @@ import { Request, Response, NextFunction } from "express";
 
 const accessTokenValidate = (req: any, res: Response, next: NextFunction) => {
   try {
+    var token = '';
     if (!req.headers.authorization) {
-      return res.sendStatus(401);
+      token = req.session.accessToken;
+    }
+    else {
+      token = req.headers.authorization.replace("Bearer ", "");
     }
 
-    const token = req.headers.authorization.replace("Bearer ", "");
     jwt.verify(
       token,
       process.env.ACCESS_TOKEN_SECRET as Secret,

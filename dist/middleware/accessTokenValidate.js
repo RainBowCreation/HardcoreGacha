@@ -6,10 +6,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const accessTokenValidate = (req, res, next) => {
     try {
+        var token = '';
         if (!req.headers.authorization) {
-            return res.sendStatus(401);
+            token = req.session.accessToken;
         }
-        const token = req.headers.authorization.replace("Bearer ", "");
+        else {
+            token = req.headers.authorization.replace("Bearer ", "");
+        }
         jsonwebtoken_1.default.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
             if (err) {
                 throw new Error(err.message);

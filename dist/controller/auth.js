@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.refreshToken = exports.Login = exports.Register = void 0;
+exports.refreshToken = exports.Logout = exports.Login = exports.Register = void 0;
 const db_1 = __importDefault(require("../utils/db"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const generateToken_1 = require("../utils/generateToken");
@@ -64,6 +64,15 @@ const Login = async (req, res, next) => {
                     refreshtoken: tokens.refreshToken,
                 },
             });
+            // Store access token in session
+            req.session.accessToken = tokens.accessToken;
+            // Store refresh token in HttpOnly cookie
+            res.cookie("refreshToken", tokens.refreshToken, {
+                httpOnly: true,
+                secure: true,
+                sameSite: "strict",
+                maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+            });
             return res.status(200).json({
                 accesstoken: tokens.accessToken,
                 refreshtoken: tokens.refreshToken,
@@ -77,6 +86,17 @@ const Login = async (req, res, next) => {
     }
 };
 exports.Login = Login;
+const Logout = async (req, res, next) => {
+    try {
+        // do log out
+        return res.status(400).send("Invalid credentials");
+    }
+    catch (error) {
+        console.log(error);
+        return res.status(500).send("Internal server error");
+    }
+};
+exports.Logout = Logout;
 const refreshToken = async (req, res) => {
     try {
         console.log("refresh token work");

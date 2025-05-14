@@ -7,14 +7,8 @@ exports.generateTokens = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 function generateTokens(user) {
     const { username } = user;
-    const accessToken = jsonwebtoken_1.default.sign({ username: username }, // payload
-    process.env.ACCESS_TOKEN_SECRET, // กำหนด secret
-    { expiresIn: "3m", algorithm: "HS256" } // อายุ เเละ algorithm ในการสร้าง jwt
-    );
-    const refreshToken = jsonwebtoken_1.default.sign({ username: username }, // payload
-    process.env.REFRESH_TOKEN_SECRET, // กำหนด secret
-    { expiresIn: "1d", algorithm: "HS256" } // อายุ เเละ algorithm ในการสร้าง jwt
-    );
+    const accessToken = jsonwebtoken_1.default.sign({ username: username }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "1h", algorithm: "HS256" });
+    const refreshToken = jsonwebtoken_1.default.sign({ username: username }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "7d", algorithm: "HS256" });
     return { accessToken, refreshToken };
 }
 exports.generateTokens = generateTokens;

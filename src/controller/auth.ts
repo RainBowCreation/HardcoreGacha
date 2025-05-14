@@ -3,6 +3,7 @@ import db from "../utils/db";
 import bcrypt from "bcrypt";
 import { generateTokens } from "../utils/generateToken";
 import jwt, { Secret } from "jsonwebtoken";
+import accessTokenValidate from "../middleware/accessTokenValidate";
 export const Register = async (
   req: Request,
   res: Response,
@@ -69,11 +70,35 @@ export const Login = async (
           refreshtoken: tokens.refreshToken,
         },
       });
+      // Store access token in session
+      req.session.accessToken = tokens.accessToken;
+
+      // Store refresh token in HttpOnly cookie
+      res.cookie("refreshToken", tokens.refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      });
       return res.status(200).json({
         accesstoken: tokens.accessToken,
         refreshtoken: tokens.refreshToken,
       });
     }
+    return res.status(400).send("Invalid credentials");
+  } catch (error) {
+    console.log(error);
+    return res.status(500).send("Internal server error");
+  }
+};
+
+export const Logout = async (
+  req: Request,
+res: Response,
+  next: NextFunction
+) => {
+  try {
+    // do log out
     return res.status(400).send("Invalid credentials");
   } catch (error) {
     console.log(error);
