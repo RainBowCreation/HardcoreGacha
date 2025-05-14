@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "es2021", // เราจะใช้มาตรฐาน es ไหน
+    "module": "commonjs",
+    "outDir": "dist", // เมื่อเราคอมไพล์ ts เราจะได้ js ซึ่ง dist จะเก็บไฟล์ js ไว้
+    "strict": true, // เเจ้ง error
+    "rootDir": "src", // ไฟล์ ts เราจะอยู่ที่ไหนนั่นเอง
+    "esModuleInterop": true
+  }
+}
