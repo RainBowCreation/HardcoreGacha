@@ -3,9 +3,14 @@ import { Request, Response, NextFunction } from "express";
 
 const refreshTokenValidate = (req: any, res: Response, next: NextFunction) => {
   try {
-    if (!req.body.refreshtoken) return res.sendStatus(401);
+    var token = '';
+    if (!req.body.refreshtoken) {
+      token = req.cookies.refreshToken;
+    }
+    else {
+      token = req.body.refreshtoken;
+    }
 
-    const token = req.body.refreshtoken;
     jwt.verify(
       token,
       process.env.REFRESH_TOKEN_SECRET as Secret,

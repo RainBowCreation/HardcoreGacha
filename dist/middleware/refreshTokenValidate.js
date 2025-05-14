@@ -6,9 +6,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const refreshTokenValidate = (req, res, next) => {
     try {
-        if (!req.body.refreshtoken)
-            return res.sendStatus(401);
-        const token = req.body.refreshtoken;
+        var token = '';
+        if (!req.body.refreshtoken) {
+            token = req.cookies.refreshToken;
+        }
+        else {
+            token = req.body.refreshtoken;
+        }
         jsonwebtoken_1.default.verify(token, process.env.REFRESH_TOKEN_SECRET, (err, decoded) => {
             if (err) {
                 throw new Error(err.message);

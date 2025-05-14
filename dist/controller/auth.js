@@ -108,11 +108,17 @@ const refreshToken = async (req, res) => {
             },
         });
         const oldRefreshToken = oldUser?.refreshtoken;
-        const refreshTokenFromBody = req.body.refreshtoken;
+        var refreshTokenFromReq = '';
+        if (!req.body.refreshtoken) {
+            refreshTokenFromReq = req.cookies.refreshToken;
+        }
+        else {
+            refreshTokenFromReq = req.body.refreshtoken;
+        }
         // Check if refresh token in the request body matches the one in the database
         console.log("Old Refresh Token = " + oldRefreshToken);
-        console.log("refresh token from request = " + refreshTokenFromBody);
-        if (oldRefreshToken?.toString() !== refreshTokenFromBody.toString()) {
+        console.log("refresh token from request = " + refreshTokenFromReq);
+        if (oldRefreshToken?.toString() !== refreshTokenFromReq.toString()) {
             console.log("not same refreshtoken");
             return res.sendStatus(401);
         }
@@ -133,6 +139,14 @@ const refreshToken = async (req, res) => {
             data: {
                 refreshtoken: newToken?.refreshToken,
             },
+        });
+        req.session.accessToken = newToken?.accessToken;
+        // Store refresh token in HttpOnly cookie
+        res.cookie("refreshToken", newToken?.refreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         });
         const user = {
             username: oldUser?.username,
