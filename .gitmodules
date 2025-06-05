@@ -10,3 +10,7 @@
 	path = client_ts
 	url = https://github.com/RainBowCreation/hg_client_ts.git
     branch = main
+[submodule "bridge"]
+	path = bridge
+	url = https://github.com/RainBowCreation/hg_bridge.git
+    branch = main

@@ -1,0 +1,22 @@
+{
+  "name": "hg_bridge",
+  "version": "0.1.0",
+  "description": "",
+  "main": "lib/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RainBowCreation/hg_bridge.git"
+  },
+  "author": "NathanielSong <ampnattahapat@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "neon-cli": "^0.10.1"
+  },
+  "scripts": {
+    "install": "neon build"
+  },
+  "neon": {
+    "crate": "./native",
+    "binary": "hg_bridge"
+  }
+}
