@@ -1,3 +1,0 @@
-# hg_bridge
-
-
