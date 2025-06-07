@@ -1,6 +1,10 @@
 [workspace]
 members = [
-    "shared",
+    "shared/core",
+    "shared/struct",
     "server",
+]
+exclude = [
+    "shared/bindgen"
 ]
 resolver = "2"
