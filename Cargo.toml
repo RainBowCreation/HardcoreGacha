@@ -1,4 +1,7 @@
 [workspace]
-members = ["shared", "server"]
+members = [
+    "shared",
+    "server",
+    "bridge",
+]
 resolver = "2"
-exclude = ["bridge"]
