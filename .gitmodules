@@ -6,11 +6,7 @@
 	path = server
 	url = https://github.com/RainBowCreation/hg_server.git
     branch = main
-[submodule "hg_client_ts"]
-	path = client_ts
-	url = https://github.com/RainBowCreation/hg_client_ts.git
-    branch = main
-[submodule "bridge"]
-	path = bridge
-	url = https://github.com/RainBowCreation/hg_bridge.git
+[submodule "hg_client"]
+	path = client
+	url = https://github.com/RainBowCreation/hg_client.git
     branch = main
