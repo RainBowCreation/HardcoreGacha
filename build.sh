@@ -1,5 +1,11 @@
 echo "Make sure spacetimedb is running 'spacetime start'."
 cargo clean
+cd client/ts
+rm pkg/*
+cd src
+rm module_bindings/*
+cd ../../..
+
 cd shared
 cd struct
 cargo build
@@ -11,15 +17,13 @@ cd ..
 cd bindgen
 wasm-pack build --target web --out-dir ../../client/ts/pkg
 cd ../..
+
 spacetime publish --project-path server hardcore-gacha
 # spacetime generate --lang rust --out-dir client/rust/src/module_bindings --project-path server
 spacetime generate --lang typescript --out-dir client/ts/src/module_bindings --project-path server
 # spacetime generate --lang csharp --out-dir client/ch/module_bindings --project-path server
 
-cd client/ts
-rm pkg/
-cd src
-rm module_bindings/
+cd client/ts/src
 
 Get-ChildItem -Path .\module_bindings -Recurse -File | ForEach-Object {
   $content = Get-Content -Raw -Path $_.FullName
@@ -64,4 +68,10 @@ Get-ChildItem -Path .\module_bindings -Recurse -File | ForEach-Object {
   if ($newContent -ne $content) { Set-Content -Path $_.FullName -Value $newContent }
 }
 
-echo "Done!"
+cd ..
+
+npm install
+
+cd ../..
+
+echo "Done! try 'npm run dev' at client/ts to start client webservice"
