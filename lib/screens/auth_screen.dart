@@ -61,10 +61,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (res['status'] == 200 || res['status'] == 201) {
         setState(() => isRegister = false);
-        if (mounted)
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Registered! Please login."))
-          );
+        if (res['data'] != null && res['data']['token'] != null) {
+        widget.onLogin(res['data']['token']);
+      }
       }
       else {
         if (mounted)
@@ -89,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (mounted)
           ScaffoldMessenger.of(
             context
-          ).showSnackBar(const SnackBar(content: Text("Login Failed")));
+          ).showSnackBar(SnackBar(content: Text("Error: ${res['error']}")));
       }
     }
     setState(() => loading = false);

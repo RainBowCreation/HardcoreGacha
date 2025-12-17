@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math'; 
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../core/api.dart';
@@ -23,10 +24,21 @@ class _MainDashboardState extends State<MainDashboard> {
   Map<String, List<int>> tempFormation = {}; 
   bool hasUnsavedChanges = false;
 
+  // --- GACHA STATE ---
   List<dynamic> banners = [];
   bool bannersLoading = false;
-  int _currentBannerIndex = 0;
-  final PageController _bannerController = PageController(viewportFraction: 0.9);
+  
+  // We use a large number for "infinite" scrolling simulation
+  static const int _kInfiniteStart = 1000;
+  
+  // This tracks the actual index (0, 1, 2) for dots/logic
+  int _currentRealIndex = 0; 
+  
+  late PageController _bannerController;
+  
+  // Timers
+  Timer? _autoSlideTimer;
+  Timer? _pauseTimer;
 
   bool isServerOnline = false;
   int onlinePlayers = 0;
@@ -34,8 +46,8 @@ class _MainDashboardState extends State<MainDashboard> {
 
   // --- SYNTHESIS STATE ---
   Map<String, dynamic>? synthesisResult; 
-  Map<String, dynamic>? synthesisFromHero; // Store original hero data
-  Map<String, dynamic>? synthesisToHero;   // Store target hero data
+  Map<String, dynamic>? synthesisFromHero; 
+  Map<String, dynamic>? synthesisToHero;   
   bool showSynthesisResult = false;
 
   final List<Color> partyColors = [
@@ -47,6 +59,9 @@ class _MainDashboardState extends State<MainDashboard> {
   @override
   void initState() {
     super.initState();
+    // Initialize controller starting at a high number to allow backward scrolling immediately
+    _bannerController = PageController(viewportFraction: 0.9, initialPage: _kInfiniteStart);
+    
     _loadBanners();
     _loadRoster();
     _loadParties(); 
@@ -57,9 +72,47 @@ class _MainDashboardState extends State<MainDashboard> {
   @override
   void dispose() {
     _statusTimer?.cancel();
+    _stopAutoSlide(); 
     _bannerController.dispose();
     super.dispose();
   }
+
+  // --- AUTO SLIDE LOGIC ---
+
+  void _startAutoSlide() {
+    _stopAutoSlide();
+    
+    if (banners.length > 1) {
+      _autoSlideTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+        if (mounted && _bannerController.hasClients) {
+          // Simply animate to the next page. 
+          // Since it's "infinite", we don't need to check bounds or loop back manually.
+          _bannerController.nextPage(
+            duration: const Duration(milliseconds: 500), 
+            curve: Curves.easeInOut
+          );
+        }
+      });
+    }
+  }
+
+  void _stopAutoSlide() {
+    _autoSlideTimer?.cancel();
+    _pauseTimer?.cancel();
+    _autoSlideTimer = null;
+    _pauseTimer = null;
+  }
+
+  void _handleUserInteraction() {
+    _autoSlideTimer?.cancel();
+    _pauseTimer?.cancel();
+
+    _pauseTimer = Timer(const Duration(seconds: 30), () {
+      if (mounted) _startAutoSlide();
+    });
+  }
+
+  // -------------------------
 
   Future<void> _checkServerStatus() async {
     try {
@@ -80,11 +133,25 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   Future<void> _loadBanners() async {
+    if (bannersLoading) return;
     setState(() => bannersLoading = true);
-    final res = await Api.request("/gacha/banners");
-    if (mounted) setState(() {
-          bannersLoading = false;if (res['data'] != null) banners = res['data']; }
-      );
+    try {
+      final res = await Api.request("/gacha/banners");
+      if (mounted) {
+        setState(() {
+          bannersLoading = false;
+          if (res['data'] != null && res['data'] is List) {
+            banners = res['data'];
+            // Reset "infinite" loop logic if needed, but keeping it running is usually fine
+            // If data changed drastically, we might want to jump back to center, 
+            // but for now we just start the timer.
+            _startAutoSlide();
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => bannersLoading = false);
+    }
   }
 
   Future<void> _loadRoster() async {
@@ -234,8 +301,8 @@ class _MainDashboardState extends State<MainDashboard> {
     if (res['status'] == 200 && res['data'] != null) {
       setState(() {
           synthesisResult = res['data'];
-          synthesisFromHero = fromH; // Save original data to display later
-          synthesisToHero = toH;     // Save original data to display later
+          synthesisFromHero = fromH; 
+          synthesisToHero = toH;   
           showSynthesisResult = true;
           selectedParty = null; 
         }
@@ -248,8 +315,10 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   Future<void> _pull(int count) async {
+    _handleUserInteraction();
+
     if (banners.isEmpty) return;
-    final bannerId = banners[_currentBannerIndex]['id'];
+    final bannerId = banners[_currentRealIndex]['id'];
     final res = await Api.request("/gacha/pull", method: "POST", body: {"bannerId": bannerId, "count": count});
     if (res['data'] != null && res['data']['result'] != null) {
       setState(() {
@@ -282,30 +351,85 @@ class _MainDashboardState extends State<MainDashboard> {
       ));
   }
 
-  // --- MAPPER: Merges Original Hero Data with New Synthesis Stats ---
+  void _showRateInfo(Map<String, dynamic> rawRates) {
+    // 1. FREEZE immediately
+    _stopAutoSlide(); 
+    
+    double totalWeight = 0.0;
+    rawRates.forEach((k, v) => totalWeight += (v as num).toDouble());
+
+    List<int> sortedRarities = rawRates.keys.map((k) => int.parse(k)).toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Drop Rates", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: sortedRarities.length,
+            separatorBuilder: (_, __) => const Divider(height: 8, color: Colors.white10),
+            itemBuilder: (context, index) {
+              int r = sortedRarities[index];
+              double weight = (rawRates[r.toString()] as num).toDouble();
+              double percentage = totalWeight > 0 ? (weight / totalWeight * 100) : 0;
+              
+              if (weight <= 0) return const SizedBox.shrink();
+
+              return Row(
+                children: [
+                  Container(
+                    width: 12, height: 12, 
+                    decoration: BoxDecoration(color: AppColors.getRarityColor(r), shape: BoxShape.circle)
+                  ),
+                  const SizedBox(width: 8),
+                  Text(AppColors.getRarityLabel(r), style: TextStyle(color: AppColors.getRarityColor(r), fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  Text("${percentage.toStringAsFixed(3)}%", style: const TextStyle(color: Colors.white70))
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close"))
+        ],
+      )
+    ).then((_) {
+      // 2. RESUME with 30s delay after dialog closes
+      _handleUserInteraction();
+    });
+  }
+
   Map<String, dynamic> _mapSynthesisToCardData(Map<String, dynamic>? synthData, Map<String, dynamic>? originalHero, String labelPrefix) {
     if (synthData == null) return {};
-    if (originalHero == null) return {}; // Should not happen
+    if (originalHero == null) return {}; 
 
-    // 1. Get stats from synthesis result
     final stats = synthData['stats'] ?? {}; 
     final level = synthData['level'] ?? 1;
 
-    // 2. Create a new map based on the ORIGINAL hero (so we keep race, class, display name, rarity)
     final merged = Map<String, dynamic>.from(originalHero);
-
-    // 3. Override with new values
     merged['displayName'] = "$labelPrefix: ${originalHero['displayName'] ?? originalHero['class']}";
     merged['level'] = level;
     merged['stats'] = stats;
-
-    // 4. Map top-level HP/MP/AP for the StatBox widget
-    //    Note: The Synthesis API uses "HP", "SP", "AP". The HeroCard expects lowercase keys with "max".
     merged['hp'] = {"max": stats['HP'] ?? 0};
     merged['mana'] = {"max": stats['SP'] ?? 0};
     merged['stamina'] = {"max": stats['AP'] ?? 0};
 
     return merged;
+  }
+
+  void _scrollBanner(int direction) {
+    _handleUserInteraction();
+    
+    // For infinite scroll, simply animate to previous/next page
+    if (direction > 0) {
+      _bannerController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    } else {
+      _bannerController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    }
   }
 
   @override
@@ -356,24 +480,129 @@ class _MainDashboardState extends State<MainDashboard> {
           SingleChildScrollView(
             child: Column(children: [
                 const SizedBox(height: 16),
-                SizedBox(height: 240, child: bannersLoading ? const Center(child: CircularProgressIndicator()) : banners.isEmpty ? const Center(child: Text("No Banners")) : PageView.builder(controller: _bannerController, itemCount: banners.length, onPageChanged: (i) => setState(() => _currentBannerIndex = i), itemBuilder: (ctx, i) {
-                          final b = banners[i]; final active = i == _currentBannerIndex;
-                          return AnimatedScale(scale: active ? 1.0 : 0.9, duration: const Duration(milliseconds: 200), child: Container(margin: const EdgeInsets.symmetric(horizontal: 4), decoration: BoxDecoration(gradient: active ? const LinearGradient(colors: [Color(0xFF1E293B), Color(0xFF0F172A)]) : const LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF020617)]), borderRadius: BorderRadius.circular(16), border: Border.all(color: active ? AppColors.accent : Colors.white10)), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                  Text(b['name'], style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: active ? Colors.white : Colors.grey)),
-                                  const SizedBox(height: 24),
-                                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                      ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: AppColors.accent), onPressed: () => _pull(1), child: const Text("SINGLE")),
-                                      const SizedBox(width: 16),
-                                      ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white), onPressed: () => _pull(10), child: const Text("MULTI (x10)"))
-                                    ])
-                                ])));
-                        }
-                      )),
+                
+                // --- BANNERS SECTION START ---
+                SizedBox(
+                  height: 260, 
+                  child: bannersLoading 
+                    ? const Center(child: CircularProgressIndicator()) 
+                    : banners.isEmpty 
+                      ? const Center(child: Text("No Banners")) 
+                      : Column(
+                          children: [
+                            Expanded(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  PageView.builder(
+                                    key: ValueKey(banners.length), 
+                                    controller: _bannerController, 
+                                    // Use a very large number effectively making it infinite
+                                    itemCount: banners.length * 10000, 
+                                    onPageChanged: (i) {
+                                      setState(() => _currentRealIndex = i % banners.length);
+                                    }, 
+                                    itemBuilder: (ctx, i) {
+                                      // Modulo ensures we loop through 0, 1, 2, 0, 1, 2...
+                                      final index = i % banners.length;
+                                      final b = banners[index]; 
+                                      
+                                      final active = index == _currentRealIndex;
+                                      return AnimatedScale(
+                                        scale: active ? 1.0 : 0.9, 
+                                        duration: const Duration(milliseconds: 200), 
+                                        child: Stack(
+                                          children: [
+                                            Container(
+                                              width: double.infinity,
+                                              margin: const EdgeInsets.symmetric(horizontal: 4), 
+                                              decoration: BoxDecoration(
+                                                gradient: active 
+                                                  ? const LinearGradient(colors: [Color(0xFF1E293B), Color(0xFF0F172A)]) 
+                                                  : const LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF020617)]), 
+                                                borderRadius: BorderRadius.circular(16), 
+                                                border: Border.all(color: active ? AppColors.accent : Colors.white10)
+                                              ), 
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center, 
+                                                children: [
+                                                  Text(b['name'] ?? "Unknown", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: active ? Colors.white : Colors.grey)),
+                                                  const SizedBox(height: 8),
+                                                  Text("ID: ${b['id']}", style: const TextStyle(fontSize: 10, color: Colors.white24)),
+                                                  const SizedBox(height: 24),
+                                                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                                      ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: AppColors.accent), onPressed: () => _pull(1), child: const Text("SINGLE")),
+                                                      const SizedBox(width: 16),
+                                                      ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white), onPressed: () => _pull(10), child: const Text("MULTI (x10)"))
+                                                    ])
+                                                ]
+                                              )
+                                            ),
+                                            Positioned(
+                                              top: 12, right: 16,
+                                              child: InkWell(
+                                                onTap: () => _showRateInfo(b['rate'] ?? {}),
+                                                borderRadius: BorderRadius.circular(20),
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(6),
+                                                  decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle, border: Border.all(color: Colors.white24)),
+                                                  child: const Icon(Icons.question_mark, size: 16, color: Colors.white70)
+                                                ),
+                                              )
+                                            )
+                                          ],
+                                        )
+                                      );
+                                    }
+                                  ),
+                                  
+                                  if (banners.length > 1) ...[
+                                    Positioned(
+                                      left: 0, 
+                                      child: IconButton(
+                                        icon: const Icon(Icons.arrow_back_ios, color: Colors.white24),
+                                        onPressed: () => _scrollBanner(-1)
+                                      )
+                                    ),
+                                    Positioned(
+                                      right: 0, 
+                                      child: IconButton(
+                                        icon: const Icon(Icons.arrow_forward_ios, color: Colors.white24),
+                                        onPressed: () => _scrollBanner(1)
+                                      )
+                                    ),
+                                  ]
+                                ],
+                              ),
+                            ),
+                            
+                            if (banners.length > 1)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12.0),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: List.generate(banners.length, (index) {
+                                    return Container(
+                                      width: 8, height: 8,
+                                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: _currentRealIndex == index ? AppColors.accent : Colors.white24
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              )
+                          ],
+                        )
+                ),
+                // --- BANNERS SECTION END ---
+
                 Padding(padding: const EdgeInsets.all(16), child: HeroGrid(heroes: pullResults, onRename: _renameHero))
               ])
           ),
 
-          // LOBBY
+          // LOBBY (unchanged)
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -411,7 +640,7 @@ class _MainDashboardState extends State<MainDashboard> {
                                 Expanded(child: HexFormationView(formation: tempFormation, roster: roster, onHeroDrop: _onHeroDroppedOnHex, onHeroRemove: _onHeroRemoved))
                               ])),
                         const SizedBox(height: 16),
-                        const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(left: 4, bottom: 4), child: Text("AVAILABLE HEROES (Drag to Party OR onto another Hero to Synthesize)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))),
+                        const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(left: 4, bottom: 4), child: Text("Roster", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))),
                         Expanded(child: Container(decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)), child: GridView.builder(padding: const EdgeInsets.all(8), gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 110, childAspectRatio: 0.70, crossAxisSpacing: 6, mainAxisSpacing: 6), itemCount: roster.length, itemBuilder: (ctx, i) {
                                 final h = roster[i]; final cid = h['cid'];
                                 bool inCurrent = tempFormation.containsKey(cid);
