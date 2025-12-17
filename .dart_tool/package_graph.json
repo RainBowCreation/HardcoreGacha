@@ -10,7 +10,9 @@
         "cupertino_icons",
         "fl_chart",
         "flutter",
-        "http"
+        "http",
+        "intl",
+        "stomp_dart_client"
       ],
       "devDependencies": [
         "flutter_lints",
@@ -40,6 +42,22 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "intl",
+      "version": "0.18.1",
+      "dependencies": [
+        "clock",
+        "meta",
+        "path"
+      ]
+    },
+    {
+      "name": "stomp_dart_client",
+      "version": "3.0.1",
+      "dependencies": [
+        "web_socket"
       ]
     },
     {
@@ -164,6 +182,13 @@
         "stream_channel",
         "string_scanner",
         "term_glyph"
+      ]
+    },
+    {
+      "name": "web_socket",
+      "version": "1.0.1",
+      "dependencies": [
+        "web"
       ]
     },
     {

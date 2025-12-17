@@ -86,6 +86,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "intl",
+      "rootUri": "file:///home/nathanielsong/.pub-cache/hosted/pub.dev/intl-0.18.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "leak_tracker",
       "rootUri": "file:///home/nathanielsong/.pub-cache/hosted/pub.dev/leak_tracker-11.0.2",
       "packageUri": "lib/",
@@ -152,6 +158,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "stomp_dart_client",
+      "rootUri": "file:///home/nathanielsong/.pub-cache/hosted/pub.dev/stomp_dart_client-3.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "stream_channel",
       "rootUri": "file:///home/nathanielsong/.pub-cache/hosted/pub.dev/stream_channel-2.1.4",
       "packageUri": "lib/",
@@ -196,6 +208,12 @@
     {
       "name": "web",
       "rootUri": "file:///home/nathanielsong/.pub-cache/hosted/pub.dev/web-1.1.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "web_socket",
+      "rootUri": "file:///home/nathanielsong/.pub-cache/hosted/pub.dev/web_socket-1.0.1",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },

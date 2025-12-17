@@ -16,3 +16,10 @@ Cargo.lock
 # Spacetime ignore
 /.spacetime
 .fake
+
+*.lock
+**/*.lock
+.dart_tool/
+**/*.filecache
+build/
+.vscode/
