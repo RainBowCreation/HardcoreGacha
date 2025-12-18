@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../core/api.dart';
 import 'dashboard.dart';
@@ -11,20 +12,76 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   bool isLoggedIn = false;
+  bool isLoading = true;
 
-  void login(String t) {
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+
+    if (token != null && token.isNotEmpty) {
+      // Set token temporarily to test validity
+      Api.token = token;
+
+      try {
+        final res = await Api.request("/auth/validate", method: "GET");
+        
+        if (res['status'] == 200) {
+          setState(() {
+            isLoggedIn = true;
+            isLoading = false;
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint("Token validation failed: $e");
+      }
+    }
+
+    Api.token = null; 
+    await prefs.remove('auth_token');
+    if (mounted) {
+      setState(() {
+        isLoggedIn = false;
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> login(String t) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_token', t);
+    
     Api.token = t;
     setState(() => isLoggedIn = true);
   }
 
-  void logout() {
-    final res = Api.request("/auth/logout", method: "POST");
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+    
+    try {
+      Api.request("/auth/logout", method: "POST");
+    } catch (_) {}
+
     Api.token = null;
     setState(() => isLoggedIn = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        backgroundColor: AppColors.bg,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return isLoggedIn
       ? MainDashboard(onLogout: logout)
       : LoginScreen(onLogin: login);
@@ -44,7 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _userController = TextEditingController();
   final _emailController = TextEditingController();
   final _passController = TextEditingController();
-  final _confirmPassController = TextEditingController(); // 1. New controller
+  final _confirmPassController = TextEditingController();
   bool loading = false;
 
   // Simple email validator
