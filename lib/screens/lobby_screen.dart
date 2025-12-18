@@ -301,7 +301,7 @@ class LobbyScreenState extends State<LobbyScreen> {
 
                                     Expanded(
                                       child: AnimatedOpacity(
-                                        duration: const Duration(milliseconds: 200),e
+                                        duration: const Duration(milliseconds: 200),
                                         opacity: isCollapsed ? 0.0 : 1.0,
                                         child: isCollapsed
                                           ? const SizedBox() // Optimization: don't draw text layout if hidden

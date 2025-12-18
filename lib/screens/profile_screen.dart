@@ -412,25 +412,40 @@ class _GachaChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sortedEntries = data.rarityCounts.entries.toList()..sort((a, b) => b.key.compareTo(a.key));
+    // Sort: Highest rarity first
+    final sortedEntries = data.rarityCounts.entries.toList()
+      ..sort((a, b) => b.key.compareTo(a.key));
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
+      decoration: BoxDecoration(
+        color: AppColors.card, 
+        borderRadius: BorderRadius.circular(16), 
+        border: Border.all(color: Colors.white10)
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(data.title.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text(
+            data.title.toUpperCase(), 
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)
+          ),
           const Divider(color: Colors.white10, height: 24),
           Expanded(
             child: Row(
               children: [
+                // --- PIE CHART (Left) ---
                 AspectRatio(
                   aspectRatio: 1,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      CustomPaint(size: const Size(140, 140), painter: _PieChartPainter(data.rarityCounts, data.total)),
+                      // Keeps using solid colors for clarity in the chart itself
+                      CustomPaint(
+                        size: const Size(140, 140), 
+                        painter: _PieChartPainter(data.rarityCounts, data.total)
+                      ),
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -442,6 +457,8 @@ class _GachaChartCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 24),
+                
+                // --- LEGEND (Right) ---
                 Expanded(
                   child: SingleChildScrollView(
                     child: Column(
@@ -450,10 +467,29 @@ class _GachaChartCard extends StatelessWidget {
                           padding: const EdgeInsets.only(bottom: 6.0),
                           child: Row(
                             children: [
-                              Container(width: 8, height: 8, decoration: BoxDecoration(color: AppColors.getRarityColor(entry.key), shape: BoxShape.circle)),
+                              // 1. Gradient Circle Indicator
+                              RarityContainer(
+                                rarity: entry.key,
+                                width: 8,
+                                height: 8,
+                                shape: BoxShape.circle,
+                              ),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(AppColors.getRarityLabel(entry.key), style: const TextStyle(fontSize: 11, color: AppColors.textDim))),
-                              Text("${entry.value} (${(entry.value / data.total * 100).toStringAsFixed(1)}%)", style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w500)),
+
+                              // 2. Gradient Text Label
+                              Expanded(
+                                child: RarityText(
+                                  AppColors.getRarityLabel(entry.key),
+                                  rarity: entry.key,
+                                  fontSize: 11,
+                                )
+                              ),
+
+                              // 3. Percentage Value
+                              Text(
+                                "${entry.value} (${(entry.value / data.total * 100).toStringAsFixed(1)}%)", 
+                                style: const TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w500)
+                              ),
                             ],
                           ),
                         );

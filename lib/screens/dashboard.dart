@@ -123,11 +123,11 @@ class _MainDashboardState extends State<MainDashboard> {
                 children: [
                   Text("$gems", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
                   const SizedBox(width: 4),
-                  const Icon(Icons.diamond, size: 14, color: Color(0xFF29B6F6)),
+                  const Icon(AppIcons.gem, size: 14, color: AppColors.gem),
                   const SizedBox(width: 12),
                   Text("$coins", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
                   const SizedBox(width: 4),
-                  const Icon(Icons.monetization_on, size: 14, color: Color(0xFFFFCA28)),
+                  const Icon(AppIcons.coin, size: 14, color: AppColors.coin),
                 ],
               ),
             ),

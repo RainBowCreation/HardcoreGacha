@@ -47,6 +47,7 @@ class HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final rarity = data['rarity'] ?? 1;
     final rarityColor = AppColors.getRarityColor(rarity);
+    final rarityGradient = AppColors.getGradient(rarity);
     final stats = data['stats'] ?? {};
     final displayName = data['displayName'] ?? data['class'] ?? "Unknown";
     final isDeployed = partyColor != null;
@@ -67,7 +68,12 @@ class HeroCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
 
-              Container(height: 4, color: rarityColor),
+              RarityContainer(
+                rarity: rarity,
+                height: 4,
+                width: double.infinity,
+                borderRadius: BorderRadius.circular(2)
+              ),
 
               Expanded(
                 child: Padding(
@@ -89,10 +95,7 @@ class HeroCard extends StatelessWidget {
                               )
                             )
                           ),
-                          Text(
-                            "Lv.${data['level'] ?? 1}",
-                            style: TextStyle(color: rarityColor, fontSize: 9, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)
-                          )
+                          RarityText("Lv.${data['level'] ?? 1}", rarity: rarity, fontSize: 9)
                         ]
                       ),
                       Text(
