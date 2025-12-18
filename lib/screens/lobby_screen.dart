@@ -34,6 +34,12 @@ class LobbyScreenState extends State<LobbyScreen> {
   Map<String, dynamic>? synthesisToHero;   
   bool showSynthesisResult = false;
   
+  // --- NEW SYNTHESIS MODE STATE ---
+  bool _isSynthesisMode = false;
+  Set<String> _synthesisMaterials = {};
+  String? _synthesisTarget;
+  // -------------------------------
+
   // UI State
   bool? _isSidebarCollapsed;
   bool _isNarrowSidebarOpen = false;
@@ -121,6 +127,11 @@ class LobbyScreenState extends State<LobbyScreen> {
           (p['formation'] as Map).forEach((k, v) => tempFormation[k] = List<int>.from(v));
         }
         hasUnsavedChanges = false;
+        
+        // Ensure synthesis mode is off when selecting party to avoid confusion
+        _isSynthesisMode = false;
+        _synthesisMaterials.clear();
+        _synthesisTarget = null;
       }
     );
   }
@@ -182,6 +193,91 @@ class LobbyScreenState extends State<LobbyScreen> {
     if (res['status'] == 200) _loadRoster(page: _currentPage);
   }
 
+  // --- SYNTHESIS LOGIC START ---
+
+  void _toggleSynthesisMode() {
+    setState(() {
+      _isSynthesisMode = !_isSynthesisMode;
+      // Reset selections when toggling
+      _synthesisMaterials.clear();
+      _synthesisTarget = null;
+    });
+  }
+
+  // Single Click in Synthesis Mode
+  void _onSynthesisHeroTap(String cid) {
+    if (_synthesisTarget == cid) {
+      // If tapping the Target, trigger confirmation
+      _confirmMultiSynthesis();
+    } else {
+      setState(() {
+        // Toggle material selection
+        if (_synthesisMaterials.contains(cid)) {
+          _synthesisMaterials.remove(cid);
+        } else {
+          _synthesisMaterials.add(cid);
+        }
+      });
+    }
+  }
+
+  // Double Click / Long Press in Synthesis Mode
+  void _onSynthesisHeroSetTarget(String cid) {
+    setState(() {
+      if (_synthesisTarget == cid) {
+        // Deselect if already target
+        _synthesisTarget = null;
+      } else {
+        _synthesisTarget = cid;
+        // Ensure target isn't in material list
+        _synthesisMaterials.remove(cid);
+      }
+    });
+  }
+
+  void _confirmMultiSynthesis() {
+    if (_synthesisTarget == null || _synthesisMaterials.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Select a target (Green) and at least one material (Red).")));
+      return;
+    }
+
+    final toHero = roster.firstWhere((h) => h['cid'] == _synthesisTarget, orElse: () => null);
+    if (toHero == null) return;
+    
+    // For display in dialog, just show first material name + count
+    final firstMatCid = _synthesisMaterials.first;
+    final firstMat = roster.firstWhere((h) => h['cid'] == firstMatCid, orElse: () => null);
+    
+    String matsText = "'${firstMat?['displayName']}'";
+    if (_synthesisMaterials.length > 1) {
+      matsText += " and ${_synthesisMaterials.length - 1} others";
+    }
+
+    // Dummy "fromHero" for the result view logic (visual only)
+    Map<String, dynamic> dummyFromHero = firstMat != null ? Map.from(firstMat) : {};
+    dummyFromHero['displayName'] = "Selected Materials";
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm Synthesis", style: TextStyle(color: Colors.redAccent)),
+        content: Text("WARNING: $matsText will be consumed to upgrade '${toHero['displayName']}'.\n\nThis cannot be undone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _executeSynthesis(_synthesisMaterials.toList(), _synthesisTarget!, dummyFromHero, toHero); 
+            }, 
+            child: const Text("CONFIRM")
+          )
+        ]
+      )
+    );
+  }
+
+  // Legacy Drop Logic (1-on-1)
   void _onHeroDroppedOnHero(String fromCid, String toCid) {
     if (fromCid == toCid) return;
     final fromHero = roster.firstWhere((h) => h['cid'] == fromCid, orElse: () => null);
@@ -198,15 +294,18 @@ class LobbyScreenState extends State<LobbyScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              Navigator.pop(ctx); _executeSynthesis(fromCid, toCid, fromHero, toHero); }, 
+              Navigator.pop(ctx); 
+              _executeSynthesis([fromCid], toCid, fromHero, toHero); 
+            }, 
             child: const Text("CONFIRM")
           )
         ]
       )
     );
   }
+  // --- SYNTHESIS LOGIC END ---
 
-  // change fromcids to list to support multiple select
+  // Updated to accept List<String> for fromCids
   Future<void> _executeSynthesis(List<String> fromCids, String toCid, Map<String, dynamic> fromH, Map<String, dynamic> toH) async {
     final res = await Api.request("/roster/synthesis", method: "POST", body: {"from": fromCids, "to": toCid});
     if (res['status'] == 200 && res['data'] != null) {
@@ -216,6 +315,11 @@ class LobbyScreenState extends State<LobbyScreen> {
           synthesisToHero = toH;   
           showSynthesisResult = true;
           selectedParty = null; 
+          
+          // Reset mode after successful synth
+          _isSynthesisMode = false;
+          _synthesisMaterials.clear();
+          _synthesisTarget = null;
         }
       );
       _loadRosterCount();
@@ -345,6 +449,33 @@ class LobbyScreenState extends State<LobbyScreen> {
               )
             ]
           ),
+
+          const SizedBox(height: 8),
+
+          // --- SYNTHESIS TOGGLE BUTTON START ---
+          SizedBox(
+            width: double.infinity,
+            child: Tooltip(
+              message: "Toggle Synthesis Mode",
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isSynthesisMode ? Colors.amber[700] : Colors.grey[800],
+                  foregroundColor: Colors.white,
+                  padding: isCollapsed ? EdgeInsets.zero : const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: _isSynthesisMode ? 6 : 2,
+                ),
+                onPressed: _toggleSynthesisMode,
+                child: isCollapsed 
+                  ? const Icon(Icons.construction, size: 20) 
+                  : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [Icon(Icons.construction, size: 16), SizedBox(width: 8), Text("SYNTHESIS")]
+                  )
+              ),
+            )
+          ),
+          // --- SYNTHESIS TOGGLE BUTTON END ---
 
           const SizedBox(height: 8),
 
@@ -490,7 +621,12 @@ class LobbyScreenState extends State<LobbyScreen> {
               ])
         ),
         const SizedBox(height: 16),
-        const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(left: 4, bottom: 4), child: Text("Roster", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))),
+        // Roster header with Synthesis indicator
+        Row(
+          children: [
+            const Padding(padding: EdgeInsets.only(left: 4, bottom: 4), child: Text("Roster", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))),
+          ],
+        ),
         
         Expanded(
           child: LayoutBuilder(
@@ -506,7 +642,11 @@ class LobbyScreenState extends State<LobbyScreen> {
               final double cardHeight = cardWidth / 0.70;
 
               return Container(
-                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
+                decoration: BoxDecoration(
+                  color: _isSynthesisMode ? Colors.amber.withOpacity(0.05) : Colors.black26, 
+                  borderRadius: BorderRadius.circular(12), 
+                  border: Border.all(color: _isSynthesisMode ? Colors.amber.withOpacity(0.3) : Colors.white10)
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: _isLoadingRoster 
                 ? const Center(child: CircularProgressIndicator())
@@ -541,6 +681,10 @@ class LobbyScreenState extends State<LobbyScreen> {
                               }
                             }
 
+                            // --- SYNTHESIS HIGHLIGHT LOGIC ---
+                            bool isMaterial = _synthesisMaterials.contains(cid);
+                            bool isTarget = _synthesisTarget == cid;
+
                             return _InteractiveDraggableHero(
                               key: ValueKey(cid), 
                               heroData: h,
@@ -551,6 +695,13 @@ class LobbyScreenState extends State<LobbyScreen> {
                               isMobileMode: isMobileMode,
                               onRename: _renameHero,
                               onDropAccept: _onHeroDroppedOnHero,
+                              
+                              // New Props
+                              isSynthesisMode: _isSynthesisMode,
+                              isSynthesisMaterial: isMaterial,
+                              isSynthesisTarget: isTarget,
+                              onSynthesisTap: () => _onSynthesisHeroTap(cid),
+                              onSynthesisSetTarget: () => _onSynthesisHeroSetTarget(cid),
                             );
                           },
                           childCount: roster.length,
@@ -576,7 +727,7 @@ class LobbyScreenState extends State<LobbyScreen> {
 
   Widget _buildCompactPageSelector() {
     int totalPages = (_totalHeroes / 50).ceil();
-    if (totalPages < 1) totalPages = 1;
+    if (totalPages <= 1) return Container();
 
     bool canGoNext = _currentPage < totalPages || (!_isLoadingRoster && roster.length >= 50);
 
@@ -602,7 +753,7 @@ class LobbyScreenState extends State<LobbyScreen> {
                 ? "Page $_currentPage" 
                 : "$_currentPage / $totalPages",
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-            ),
+            ) ,
           ),
 
           _buildTinyPageBtn(Icons.chevron_right, 
@@ -824,8 +975,15 @@ class _InteractiveDraggableHero extends StatefulWidget {
   final Future<void> Function(String, String) onRename;
   final Function(String, String) onDropAccept;
 
+  // New Synthesis Props
+  final bool isSynthesisMode;
+  final bool isSynthesisMaterial;
+  final bool isSynthesisTarget;
+  final VoidCallback onSynthesisTap;
+  final VoidCallback onSynthesisSetTarget;
+
   const _InteractiveDraggableHero({
-    super.key, // <--- THIS WAS MISSING. It allows key: ValueKey(cid) to work.
+    super.key,
     required this.heroData,
     required this.cid,
     required this.partyColor,
@@ -834,6 +992,13 @@ class _InteractiveDraggableHero extends StatefulWidget {
     required this.isMobileMode,
     required this.onRename,
     required this.onDropAccept,
+    
+    // Default values for standard mode
+    this.isSynthesisMode = false,
+    this.isSynthesisMaterial = false,
+    this.isSynthesisTarget = false,
+    required this.onSynthesisTap,
+    required this.onSynthesisSetTarget,
   });
 
   @override
@@ -845,6 +1010,33 @@ class _InteractiveDraggableHeroState extends State<_InteractiveDraggableHero> {
 
   @override
   Widget build(BuildContext context) {
+    // If Synthesis Mode is ON, we disable dragging and use Tap/DoubleTap gestures
+    if (widget.isSynthesisMode) {
+      return GestureDetector(
+        onTap: widget.onSynthesisTap,
+        onDoubleTap: widget.onSynthesisSetTarget,
+        onLongPress: widget.onSynthesisSetTarget, // Alternative for mobile
+        child: Container(
+          decoration: BoxDecoration(
+            // Green for Target, Red for Material
+            border: widget.isSynthesisTarget 
+              ? Border.all(color: Colors.greenAccent, width: 4)
+              : widget.isSynthesisMaterial 
+                  ? Border.all(color: Colors.redAccent, width: 3) 
+                  : null,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: widget.isSynthesisTarget 
+              ? [BoxShadow(color: Colors.greenAccent.withOpacity(0.5), blurRadius: 10)]
+              : widget.isSynthesisMaterial
+                  ? [BoxShadow(color: Colors.redAccent.withOpacity(0.4), blurRadius: 6)]
+                  : null,
+          ),
+          child: HeroCard(data: widget.heroData, onRename: (_, __) {}, partyColor: widget.partyColor)
+        ),
+      );
+    }
+
+    // Standard Drag and Drop Mode
     return DragTarget<String>(
       onWillAccept: (fromCid) => fromCid != widget.cid,
       onAccept: (fromCid) => widget.onDropAccept(fromCid, widget.cid),
@@ -878,7 +1070,7 @@ class _InteractiveDraggableHeroState extends State<_InteractiveDraggableHero> {
               child: HeroCard(data: widget.heroData, onRename: widget.onRename, partyColor: widget.partyColor)
             ),
             child: Container(
-              color: Colors.transparent, // Fixes Hit Box
+              color: Colors.transparent, 
               child: Container(
                 decoration: BoxDecoration(
                   border: _isPressed 
