@@ -48,17 +48,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void didUpdateWidget(covariant ProfileScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    
     if (widget.playerData != oldWidget.playerData) {
       final newCharts = _parseGachaStats(widget.playerData?['statistic']);
-      if (newCharts.length != _parsedCharts.length) {
-        setState(() {
-            _parsedCharts = newCharts;
-            _currentChartPage = 0;
-          }
-        );
+      final int oldLength = _parsedCharts.length;
+
+      setState(() {
+        _parsedCharts = newCharts;
+      });
+
+      if (newCharts.length != oldLength || _currentChartPage >= newCharts.length) {
+        setState(() => _currentChartPage = 0);
         if (_chartPageController.hasClients) {
           _chartPageController.jumpToPage(0);
         }
+      }
+
+      if (_parsedCharts.isNotEmpty && _chartScrollTimer == null && _chartPauseTimer == null) {
         _startChartAutoScroll();
       }
     }
