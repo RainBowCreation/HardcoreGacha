@@ -13,18 +13,30 @@ class LobbyScreen extends StatefulWidget {
 }
 
 class LobbyScreenState extends State<LobbyScreen> {
+  // Roster State
   List<dynamic> roster = [];
+  int _currentPage = 1;
+  int _totalHeroes = 0;
+  bool _isLoadingRoster = false;
+  final ScrollController _rosterScrollController = ScrollController();
+  
+  // Party State
   List<dynamic> parties = []; 
   dynamic selectedParty;
 
+  // Formation State
   Map<String, List<int>> tempFormation = {}; 
   bool hasUnsavedChanges = false;
 
+  // Synthesis State
   Map<String, dynamic>? synthesisResult; 
   Map<String, dynamic>? synthesisFromHero; 
   Map<String, dynamic>? synthesisToHero;   
   bool showSynthesisResult = false;
+  
+  // UI State
   bool? _isSidebarCollapsed;
+  bool _isNarrowSidebarOpen = false;
 
   final List<Color> partyColors = [
     const Color(0xFFFF5252), const Color(0xFF448AFF), const Color(0xFF69F0AE),
@@ -38,16 +50,46 @@ class LobbyScreenState extends State<LobbyScreen> {
     refresh();
   }
 
-  Future<void> refresh() async {
-    await Future.wait([_loadRoster(), _loadParties()]);
-    if (mounted) setState(() {
-          showSynthesisResult = false; }
-      );
+  @override
+  void dispose() {
+    _rosterScrollController.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadRoster() async {
-    final res = await Api.request("/roster/info/all", query: {"page": "1"});
-    if (res['data'] != null && mounted) setState(() => roster = res['data']);
+  Future<void> refresh() async {
+    await _loadRosterCount();
+    await Future.wait([_loadRoster(page: 1), _loadParties()]);
+    if (mounted) setState(() => showSynthesisResult = false);
+  }
+
+  Future<void> _loadRosterCount() async {
+    final res = await Api.request("/roster/count");
+    if (res['count'] != null && mounted) {
+      setState(() {
+        _totalHeroes = int.tryParse(res['count'].toString()) ?? 0;
+      });
+    }
+  }
+
+  Future<void> _loadRoster({required int page}) async {
+    setState(() {
+      _isLoadingRoster = true;
+      _currentPage = page;
+    });
+
+    final res = await Api.request("/roster/info/all", query: {"page": page.toString()});
+    
+    if (mounted) {
+      setState(() {
+        if (res['data'] != null) {
+          roster = res['data'];
+          if (_rosterScrollController.hasClients) {
+            _rosterScrollController.jumpTo(0);
+          }
+        }
+        _isLoadingRoster = false;
+      });
+    }
   }
 
   Future<void> _loadParties() async {
@@ -137,7 +179,7 @@ class LobbyScreenState extends State<LobbyScreen> {
 
   Future<void> _renameHero(String cid, String newName) async {
     final res = await Api.request("/roster/rename", method: "POST", body: {"cid": cid, "name": newName});
-    if (res['status'] == 200) _loadRoster();
+    if (res['status'] == 200) _loadRoster(page: _currentPage);
   }
 
   void _onHeroDroppedOnHero(String fromCid, String toCid) {
@@ -175,7 +217,8 @@ class LobbyScreenState extends State<LobbyScreen> {
           selectedParty = null; 
         }
       );
-      _loadRoster(); 
+      _loadRosterCount();
+      _loadRoster(page: _currentPage); 
     }
     else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Synthesis Failed: ${res['error']}")));
@@ -200,224 +243,376 @@ class LobbyScreenState extends State<LobbyScreen> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final bool isNarrowMode = constraints.maxWidth < 500;
+        
         final bool shouldAutoMinimize = 220 > (constraints.maxWidth * 0.2);
         final bool isCollapsed = _isSidebarCollapsed ?? shouldAutoMinimize;
+        
+        final Widget content = _buildMainContent(constraints, isNarrowMode);
+        final Widget sidebar = _buildSidebar(isCollapsed, isNarrowMode);
 
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        if (isNarrowMode) {
+          // --- NARROW LAYOUT ---
+          return Stack(
             children: [
-              // --- LEFT SIDE  ---
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                width: isCollapsed ? 70 : 220,
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 70, 
-                          height: 50,
-                          child: Center(
-                            child: IconButton(
-                              icon: const Icon(Icons.menu),
-                              onPressed: () => setState(() => _isSidebarCollapsed = !isCollapsed)
-                            )
-                          )
-                        )
-                      ]
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // NEW PARTY BUTTON
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: AppColors.text,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-                        ),
-                        onPressed: () => _showTextInputDialog("Name", "", (v) => _createParty(v)),
-                        child: isCollapsed 
-                          ? const Icon(Icons.add, size: 20) 
-                          : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [Icon(Icons.add, size: 16), SizedBox(width: 8), Text("NEW PARTY")]
-                          )
-                      )
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // PARTY LIST
-                    Expanded(
-                      child: Card(
-                        margin: EdgeInsets.zero,
-                        clipBehavior: Clip.antiAlias,
-                        elevation: 0,
-                        color: Colors.transparent,
-                        child: ListView.builder(
-                          itemCount: parties.length,
-                          padding: EdgeInsets.zero,
-                          itemBuilder: (ctx, i) {
-                            final p = parties[i];
-                            final c = partyColors[i % partyColors.length];
-                            final selected = (selectedParty != null && selectedParty['pid'] == p['pid']);
-
-                            return InkWell(
-                              onTap: () => _selectParty(p),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                                height: 60,
-                                color: selected ? AppColors.accent.withOpacity(0.1) : Colors.transparent,
-                                child: Row(
-                                  children: [
-                                    AnimatedContainer(
-                                      duration: const Duration(milliseconds: 300),
-                                      curve: Curves.easeInOut,
-                                      width: isCollapsed ? 70 : 50, 
-                                      alignment: Alignment.center, // Always center the dot within this slice
-                                      child: AnimatedContainer(
-                                        // This controls the actual size of the colored circle
-                                        duration: const Duration(milliseconds: 300),
-                                        curve: Curves.easeInOut,
-                                        width: isCollapsed ? 24 : 12,  // Large when collapsed, small when expanded
-                                        height: isCollapsed ? 24 : 12,
-                                        decoration: BoxDecoration(
-                                          color: c,
-                                          shape: BoxShape.circle,
-                                          border: (selected && isCollapsed) 
-                                            ? Border.all(color: Colors.white, width: 2) 
-                                            : null
-                                        )
-                                      )
-                                    ),
-
-                                    Expanded(
-                                      child: AnimatedOpacity(
-                                        duration: const Duration(milliseconds: 200),
-                                        opacity: isCollapsed ? 0.0 : 1.0,
-                                        child: isCollapsed
-                                          ? const SizedBox() // Optimization: don't draw text layout if hidden
-                                          : Text(
-                                            p['partyName'] ?? p['pid'],
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                              color: selected ? Colors.white : Colors.grey
-                                            )
-                                          )
-                                      )
-                                    ),
-
-                                    // --- DELETE BUTTON  ---
-                                    if (selected && !isCollapsed)
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, size: 16, color: Colors.redAccent),
-                                      onPressed: () => _deleteParty(p['pid'])
-                                    )
-                                  ]
-                                )
-                              )
-                            );
-                          }
-                        )
-                      )
-                    )
-                  ]
-                )
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: content,
               ),
 
-              const SizedBox(width: 16),
+              if (!_isNarrowSidebarOpen)
+                Positioned(
+                  left: 16, 
+                  top: 16,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.card, 
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: const Offset(0,2))]
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.menu, color: Colors.white),
+                      onPressed: () => setState(() => _isNarrowSidebarOpen = true),
+                    ),
+                  ),
+                ),
 
-              // --- RIGHT SIDE ---
-              Expanded(
-                child: showSynthesisResult && synthesisResult != null
-                  ? _buildSynthesisResultView()
-                  : Column(
+              if (_isNarrowSidebarOpen)
+                Positioned.fill(
+                  child: Stack(
                     children: [
-                      Container(
-                        height: 240,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(12)
-                        ),
-                        child: selectedParty == null
-                          ? const Center(child: Text(""))
-                          : Column(children: [
-                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                  GestureDetector(
-                                    onTap: () => _showTextInputDialog("Rename", selectedParty['partyName'] ?? "", (v) => _renameParty(selectedParty['pid'], v)),
-                                    child: Text(selectedParty['partyName'] ?? "Unknown", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
-                                  const SizedBox(width: 8),
-                                  const Icon(Icons.edit, size: 14, color: Colors.grey)
-                                ]),
-                              if (hasUnsavedChanges)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
-                                  icon: const Icon(Icons.check, size: 14),
-                                  label: const Text("SAVE CHANGES"),
-                                  onPressed: _saveFormation)),
-                              const SizedBox(height: 12),
-                              Expanded(child: HexFormationView(formation: tempFormation, roster: roster, onHeroDrop: _onHeroDroppedOnHex, onHeroRemove: _onHeroRemoved))
-                            ])
+                      GestureDetector(
+                        onTap: () => setState(() => _isNarrowSidebarOpen = false),
+                        child: Container(color: Colors.black54),
                       ),
-                      const SizedBox(height: 16),
-                      const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(left: 4, bottom: 4), child: Text("Roster", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))),
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
-                          child: GridView.builder(
-                            padding: const EdgeInsets.all(8),
-                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 110, childAspectRatio: 0.70, crossAxisSpacing: 6, mainAxisSpacing: 6),
-                            itemCount: roster.length,
-                            itemBuilder: (ctx, i) {
-                              final h = roster[i];
-                              final cid = h['cid'];
-                              Color? color;
-                              if (tempFormation.containsKey(cid) && selectedParty != null) {
-                                int idx = parties.indexWhere((p) => p['pid'] == selectedParty['pid']);
-                                if (idx != -1) color = partyColors[idx % partyColors.length];
-                              }
-                              else {
-                                for (int pIdx = 0; pIdx < parties.length; pIdx++) {
-                                  if (parties[pIdx]['pid'] != (selectedParty?['pid']) && parties[pIdx]['formation'] != null && (parties[pIdx]['formation'] as Map).containsKey(cid)) {
-                                    color = partyColors[pIdx % partyColors.length].withOpacity(0.5);
-                                    break;
-                                  }
-                                }
-                              }
-                              return DragTarget<String>(
-                                onWillAccept: (fromCid) => fromCid != cid,
-                                onAccept: (fromCid) => _onHeroDroppedOnHero(fromCid, cid),
-                                builder: (context, _, __) => Draggable<String>(
-                                  data: cid,
-                                  feedback: Material(color: Colors.transparent, child: SizedBox(width: 100, height: 140, child: HeroCard(data: h, onRename: (_, __) {
-                                        }, partyColor: color))),
-                                  childWhenDragging: Opacity(opacity: 0.3, child: HeroCard(data: h, onRename: _renameHero, partyColor: color)),
-                                  child: HeroCard(data: h, onRename: _renameHero, partyColor: color)));
-                            }
-                          )
-                        )
+                      Positioned(
+                        left: 0, top: 0, bottom: 0,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 16, top: 16, bottom: 16),
+                          child: sidebar
+                        ),
                       )
                     ]
                   )
+                )
+            ],
+          );
+        } else {
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                sidebar,
+                const SizedBox(width: 16),
+                Expanded(child: content),
+              ]
+            ),
+          );
+        }
+      }
+    );
+  }
+
+  Widget _buildSidebar(bool isCollapsed, bool isNarrowMode) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      width: isCollapsed ? 50 : 220,
+      decoration: isNarrowMode 
+        ? BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(8)) 
+        : null,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 50, 
+                height: 50,
+                child: Center(
+                  child: IconButton(
+                    icon: Icon(Icons.menu),
+                    onPressed: () {
+                      if (isNarrowMode) {
+                        setState(() => _isNarrowSidebarOpen = false);
+                      } else {
+                        setState(() => _isSidebarCollapsed = !isCollapsed);
+                      }
+                    }
+                  )
+                )
               )
             ]
+          ),
+
+          const SizedBox(height: 8),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: AppColors.text,
+                padding: isCollapsed ? EdgeInsets.zero : const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+              ),
+              onPressed: () => _showTextInputDialog("Name", "", (v) => _createParty(v)),
+              child: isCollapsed 
+                ? const Icon(Icons.add, size: 20) 
+                : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [Icon(Icons.add, size: 16), SizedBox(width: 8), Text("NEW PARTY")]
+                )
+            )
+          ),
+
+          const SizedBox(height: 8),
+
+          Expanded(
+            child: Card(
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              elevation: 0,
+              color: Colors.transparent,
+              child: ListView.builder(
+                itemCount: parties.length,
+                padding: EdgeInsets.zero,
+                itemBuilder: (ctx, i) {
+                  final p = parties[i];
+                  final c = partyColors[i % partyColors.length];
+                  final selected = (selectedParty != null && selectedParty['pid'] == p['pid']);
+
+                  return InkWell(
+                    onTap: () => _selectParty(p),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      height: 60,
+                      color: Colors.transparent,
+                      child: Row(
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            width: 50, 
+                            alignment: Alignment.center, 
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                              width: isCollapsed ? 24 : 12,  
+                              height: isCollapsed ? 24 : 12,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                                border: (selected && isCollapsed) 
+                                  ? Border.all(color: Colors.white, width: 2) 
+                                  : null
+                              )
+                            )
+                          ),
+
+                          Expanded(
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 200),
+                              opacity: isCollapsed ? 0.0 : 1.0,
+                              child: isCollapsed
+                                ? const SizedBox() 
+                                : Text(
+                                  p['partyName'] ?? p['pid'],
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: selected ? Colors.white : Colors.grey
+                                  )
+                                )
+                            )
+                          ),
+
+                          if (selected && !isCollapsed)
+                          IconButton(
+                            icon: const Icon(Icons.delete, size: 16, color: Colors.redAccent),
+                            onPressed: () => _deleteParty(p['pid'])
+                          )
+                        ]
+                      )
+                    )
+                  );
+                }
+              )
+            )
           )
-        );
-      }
+        ]
+      )
+    );
+  }
+
+  Widget _buildMainContent(BoxConstraints constraints, bool isNarrowMode) {
+    final bool isMobileMode = constraints.maxWidth < 600;
+
+    if (showSynthesisResult && synthesisResult != null) {
+      return _buildSynthesisResultView();
+    }
+
+    return Column(
+      children: [
+        // If Narrow Mode, push content down slightly so top content isn't covered by Floating Hamburger
+        if (isNarrowMode) const SizedBox(height: 60),
+
+        Container(
+          height: 240,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(12)
+          ),
+          child: selectedParty == null
+            ? const Center(child: Text(""))
+            : Column(children: [
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    GestureDetector(
+                      onTap: () => _showTextInputDialog("Rename", selectedParty['partyName'] ?? "", (v) => _renameParty(selectedParty['pid'], v)),
+                      child: Text(selectedParty['partyName'] ?? "Unknown", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.edit, size: 14, color: Colors.grey)
+                  ]),
+                if (hasUnsavedChanges)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.check, size: 14),
+                    label: const Text("SAVE CHANGES"),
+                    onPressed: _saveFormation)),
+                const SizedBox(height: 12),
+                Expanded(child: HexFormationView(formation: tempFormation, roster: roster, onHeroDrop: _onHeroDroppedOnHex, onHeroRemove: _onHeroRemoved))
+              ])
+        ),
+        const SizedBox(height: 16),
+        const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(left: 4, bottom: 4), child: Text("Roster", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))),
+        
+        Expanded(
+          child: LayoutBuilder(
+            builder: (ctx, rosterConstraints) {
+              int crossAxisCount = (rosterConstraints.maxWidth / 110).floor();
+              if (crossAxisCount > 10) crossAxisCount = 10;
+              if (crossAxisCount < 2) crossAxisCount = 2;
+
+              return Container(
+                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
+                clipBehavior: Clip.antiAlias,
+                child: _isLoadingRoster 
+                ? const Center(child: CircularProgressIndicator())
+                : CustomScrollView(
+                  controller: _rosterScrollController,
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.all(8),
+                      sliver: SliverGrid(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          childAspectRatio: 0.70,
+                          crossAxisSpacing: 6,
+                          mainAxisSpacing: 6,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (ctx, i) {
+                            final h = roster[i];
+                            final cid = h['cid'];
+                            Color? color;
+                            if (tempFormation.containsKey(cid) && selectedParty != null) {
+                              int idx = parties.indexWhere((p) => p['pid'] == selectedParty['pid']);
+                              if (idx != -1) color = partyColors[idx % partyColors.length];
+                            }
+                            else {
+                              for (int pIdx = 0; pIdx < parties.length; pIdx++) {
+                                if (parties[pIdx]['pid'] != (selectedParty?['pid']) && parties[pIdx]['formation'] != null && (parties[pIdx]['formation'] as Map).containsKey(cid)) {
+                                  color = partyColors[pIdx % partyColors.length].withOpacity(0.5);
+                                  break;
+                                }
+                              }
+                            }
+                            return DragTarget<String>(
+                              onWillAccept: (fromCid) => fromCid != cid,
+                              onAccept: (fromCid) => _onHeroDroppedOnHero(fromCid, cid),
+                              builder: (context, _, __) => LongPressDraggable<String>(
+                                delay: isMobileMode ? const Duration(milliseconds: 500) : const Duration(milliseconds: 60),
+                                data: cid,
+                                feedback: Material(color: Colors.transparent, child: SizedBox(width: 100, height: 140, child: HeroCard(data: h, onRename: (_, __) {}, partyColor: color))),
+                                childWhenDragging: Opacity(opacity: 0.3, child: HeroCard(data: h, onRename: _renameHero, partyColor: color)),
+                                child: HeroCard(data: h, onRename: _renameHero, partyColor: color)
+                              )
+                            );
+                          },
+                          childCount: roster.length,
+                        ),
+                      ),
+                    ),
+                    if (_totalHeroes > 0)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Center(child: _buildCompactPageSelector()),
+                      ),
+                    )
+                  ],
+                ),
+              );
+            }
+          )
+        )
+      ]
+    );
+  }
+
+  Widget _buildCompactPageSelector() {
+    int totalPages = (_totalHeroes / 50).ceil();
+    if (totalPages < 1) totalPages = 1;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white24)
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min, 
+        children: [
+          _buildTinyPageBtn(Icons.chevron_left, 
+            enabled: _currentPage > 1 && !_isLoadingRoster, 
+            onTap: () => _loadRoster(page: _currentPage - 1)
+          ),
+          
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              "$_currentPage / $totalPages",
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+
+          _buildTinyPageBtn(Icons.chevron_right, 
+            enabled: _currentPage < totalPages && !_isLoadingRoster,
+            onTap: () => _loadRoster(page: _currentPage + 1)
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTinyPageBtn(IconData icon, {required bool enabled, required VoidCallback onTap}) {
+    return SizedBox(
+      width: 30, height: 30,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        iconSize: 18,
+        onPressed: enabled ? onTap : null,
+        icon: Icon(icon),
+        color: Colors.white,
+        disabledColor: Colors.white12,
+      )
     );
   }
 
@@ -506,7 +701,7 @@ class LobbyScreenState extends State<LobbyScreen> {
                 _buildStatRow("Level", oldHero['level'], afterStats['level']),
                 const Divider(color: Colors.white10, height: 16),
                 _buildStatRow("HP", oldStats['HP'], afterStats['stats']?['HP']),
-                _buildStatRow("MP", oldStats['SP'], afterStats['stats']?['SP']), // Note: SP usually maps to MP
+                _buildStatRow("MP", oldStats['SP'], afterStats['stats']?['SP']), 
                 _buildStatRow("AP", oldStats['AP'], afterStats['stats']?['AP']),
                 const Divider(color: Colors.white10, height: 16),
                 _buildStatRow("STR", oldStats['STR'], afterStats['stats']?['STR']),
@@ -544,13 +739,12 @@ class LobbyScreenState extends State<LobbyScreen> {
 
   Widget _buildStatRow(String label, dynamic oldVal, dynamic newVal) {
     int o = (oldVal is num) ? oldVal.toInt() : 0;
-    int n = (newVal is num) ? newVal.toInt() : o; // Default to 'o' (No Change) if n is missing
+    int n = (newVal is num) ? newVal.toInt() : o; 
 
     if (n == 0 && o > 0) n = o;
 
     int diff = n - o;
     if (diff == 0) {
-      // Show "No Change" look
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(

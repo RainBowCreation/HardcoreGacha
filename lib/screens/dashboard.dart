@@ -90,15 +90,29 @@ class _MainDashboardState extends State<MainDashboard> {
     }
   }
 
+  String _formatNum(int num) {
+    if (num >= 1000000) {
+      return "${(num / 1000000).toStringAsFixed(1)}M";
+    }
+    if (num >= 1000) {
+      return "${(num / 1000).toStringAsFixed(1)}k";
+    }
+    return "$num";
+  }
+
   @override
   Widget build(BuildContext context) {
     final currency = playerData?['currency'] ?? {};
     final int gems = currency['gem'] ?? 0;
     final int coins = currency['coin'] ?? 0;
 
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isSmall = screenWidth < 600;
+    final bool isMini = screenWidth < 400;
+
     return Scaffold(
       appBar: AppBar(
-        title: RichText(
+        title: isMini? null : RichText(
           text: const TextSpan(
             text: "Hardcore ", 
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20), 
@@ -109,7 +123,7 @@ class _MainDashboardState extends State<MainDashboard> {
         ),
         backgroundColor: Colors.black54,
         actions: [
-          // MINI CURRENCY DISPLAY ---
+          // MINI CURRENCY DISPLAY
           if (playerData != null)
             Container(
               margin: const EdgeInsets.only(right: 12),
@@ -121,18 +135,23 @@ class _MainDashboardState extends State<MainDashboard> {
               ),
               child: Row(
                 children: [
-                  Text("$gems", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                  Text(
+                    isSmall ? _formatNum(gems) : "$gems", 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)
+                  ),
                   const SizedBox(width: 4),
                   const Icon(AppIcons.gem, size: 14, color: AppColors.gem),
                   const SizedBox(width: 12),
-                  Text("$coins", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                  Text(
+                    isSmall ? _formatNum(coins) : "$coins", 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)
+                  ),
                   const SizedBox(width: 4),
                   const Icon(AppIcons.coin, size: 14, color: AppColors.coin),
                 ],
               ),
             ),
-          // ----------------------------------
-
+          
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             margin: const EdgeInsets.only(right: 12),
@@ -159,7 +178,9 @@ class _MainDashboardState extends State<MainDashboard> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isServerOnline ? "$onlinePlayers Online" : "Offline", 
+                  isServerOnline 
+                    ? "${isSmall ? _formatNum(onlinePlayers) : onlinePlayers}${isSmall ? '' : ' Online'}" 
+                    : "Offline", 
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)
                 )
               ]
@@ -171,24 +192,34 @@ class _MainDashboardState extends State<MainDashboard> {
           )
         ]
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _viewIndex,
-        backgroundColor: AppColors.card,
-        selectedItemColor: AppColors.accent,
-        unselectedItemColor: AppColors.textDim,
-        onTap: (i) {
-          setState(() {
-            _viewIndex = i;
-            if (i == 1) {
-              _lobbyKey.currentState?.refresh();
-            }
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.star), label: "GACHA"),
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "LOBBY"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "PROFILE"),
-        ]
+      bottomNavigationBar: SizedBox(
+        height: isSmall ? 40 : 60,
+        child: BottomNavigationBar(
+          currentIndex: _viewIndex,
+          backgroundColor: AppColors.card,
+          selectedItemColor: AppColors.accent,
+          unselectedItemColor: AppColors.textDim,
+          
+          showSelectedLabels: !isSmall, 
+          showUnselectedLabels: !isSmall,
+          selectedFontSize: isSmall ? 0 : 14,
+          unselectedFontSize: isSmall ? 0 : 12,
+          iconSize: isSmall ? 20 : 24,
+
+          onTap: (i) {
+            setState(() {
+              _viewIndex = i;
+              if (i == 1) {
+                _lobbyKey.currentState?.refresh();
+              }
+            });
+          },
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.star), label: "GACHA"),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: "LOBBY"),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: "PROFILE"),
+          ]
+        ),
       ),
       body: Stack(
         children: [
