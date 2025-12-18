@@ -19,18 +19,27 @@ class MainDashboard extends StatefulWidget {
 
 class _MainDashboardState extends State<MainDashboard> {
   int _viewIndex = 0;
+  
+  // Server Status
   bool isServerOnline = false;
   int onlinePlayers = 0;
   Timer? _statusTimer;
+
+  // Player Data
+  Map<String, dynamic>? playerData;
+  bool _loadingProfile = false;
   
   final GlobalKey<LobbyScreenState> _lobbyKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _initChat();
+    _loadProfile();
     _checkServerStatus();
-    _statusTimer = Timer.periodic(const Duration(seconds: 10), (timer) => _checkServerStatus());
+    _statusTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _checkServerStatus();
+      _loadProfile(silent: true); 
+    });
   }
 
   @override
@@ -40,19 +49,27 @@ class _MainDashboardState extends State<MainDashboard> {
     super.dispose();
   }
 
-  Future<void> _initChat() async {
-    if (Api.token == null) return;
-
-    String username = "Player";
+  Future<void> _loadProfile({bool silent = false}) async {
+    if (!silent) setState(() => _loadingProfile = true);
     try {
       final res = await Api.request("/player"); 
-      if (res['data'] != null) {
-        username = res['data']['displayName'] ?? res['data']['username'] ?? "Player";
+      if (mounted) {
+        setState(() {
+          if (!silent) _loadingProfile = false;
+          if (res['data'] != null) {
+            playerData = res['data'];
+            _initChat(playerData!['displayName'] ?? playerData!['username']);
+          }
+        });
       }
     } catch (e) {
-      print("Failed to fetch profile for chat init: $e");
+      print("Error loading profile: $e");
+      if (mounted && !silent) setState(() => _loadingProfile = false);
     }
+  }
 
+  Future<void> _initChat(String username) async {
+    if (Api.token == null) return;
     ChatService().connect(Api.token!, username);
   }
 
@@ -75,19 +92,47 @@ class _MainDashboardState extends State<MainDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final currency = playerData?['currency'] ?? {};
+    final int gems = currency['gem'] ?? 0;
+    final int coins = currency['coin'] ?? 0;
+
     return Scaffold(
       appBar: AppBar(
         title: RichText(
           text: const TextSpan(
-            text: "HG ", 
+            text: "Hardcore ", 
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20), 
             children: [
-              TextSpan(text: "CLIENT", style: TextStyle(color: AppColors.accent))
+              TextSpan(text: "Gacha", style: TextStyle(color: AppColors.accent))
             ]
           )
         ),
         backgroundColor: Colors.black54,
         actions: [
+          // MINI CURRENCY DISPLAY ---
+          if (playerData != null)
+            Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white12)
+              ),
+              child: Row(
+                children: [
+                  Text("$gems", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.diamond, size: 14, color: Color(0xFF29B6F6)),
+                  const SizedBox(width: 12),
+                  Text("$coins", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.monetization_on, size: 14, color: Color(0xFFFFCA28)),
+                ],
+              ),
+            ),
+          // ----------------------------------
+
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             margin: const EdgeInsets.only(right: 12),
@@ -152,7 +197,11 @@ class _MainDashboardState extends State<MainDashboard> {
             children: [
               const GachaScreen(),
               LobbyScreen(key: _lobbyKey),
-              const ProfileScreen(),
+              ProfileScreen(
+                playerData: playerData, 
+                isLoading: _loadingProfile,
+                onRefresh: _loadProfile
+              ),
             ]
           ),
 

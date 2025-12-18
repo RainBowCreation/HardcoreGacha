@@ -37,7 +37,6 @@ class HexFormationView extends StatelessWidget {
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            // 1. Grid Background
             CustomPaint(
               size: Size(constraints.maxWidth, constraints.maxHeight),
               painter: HexGridPainter(
@@ -48,7 +47,6 @@ class HexFormationView extends StatelessWidget {
               )
             ),
 
-            // 2. Interactive Tokens
             ...coords.map((p) {
                 double x = center.dx + hexSize * sqrt(3) * (p.x + p.y / 2);
                 double y = center.dy + hexSize * 1.5 * p.y;
@@ -76,7 +74,7 @@ class HexFormationView extends StatelessWidget {
                       return Stack(
                         alignment: Alignment.center,
                         children: [
-                          // A. Drop Zone (Correct Aspect Ratio)
+                          // Drop Zone
                           ClipPath(
                             clipper: HexagonClipper(),
                             child: Container(
@@ -86,7 +84,7 @@ class HexFormationView extends StatelessWidget {
                             )
                           ),
 
-                          // B. Hero Token
+                          // Hero Token
                           if (occupantCid != null)
                           Draggable<String>(
                             data: occupantCid,
@@ -126,7 +124,6 @@ class HexFormationView extends StatelessWidget {
     String label = hero != null ? (hero['displayName'] ?? hero['class']) : "Unknown";
     int lvl = hero != null ? (hero['level'] ?? 1) : 1;
 
-    // Scale slightly down to fit inside the grid lines
     return Transform.scale(
       scale: 0.9,
       child: ClipPath(

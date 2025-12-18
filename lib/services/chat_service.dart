@@ -5,7 +5,6 @@ import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../core/constants.dart';
 import '../core/api.dart';
 
-// --- MODELS ---
 class ChatMessage {
   final String id;
   final String sender;
@@ -64,20 +63,16 @@ class ChatService extends ChangeNotifier {
   // Channels
   final Map<String, ChatChannel> _channels = {
     'server': ChatChannel(id: 'server', name: 'Server', type: 'SERVER'),
-    'local': ChatChannel(id: 'local', name: 'Local', type: 'LOCAL'),
-    'p2p': ChatChannel(id: 'p2p', name: 'Direct Messages', type: 'P2P'),
+    'local': ChatChannel(id: 'local', name: 'Local', type: 'LOCAL')
   };
 
-  // Stores the cleanup functions returned by subscribe()
   final Map<String, dynamic> _unsubscribeFunctions = {}; 
   
   String? _currentUser;
   
-  // Getters
   List<ChatChannel> get channels => _channels.values.toList();
   ChatChannel? getChannel(String id) => _channels[id];
 
-  // 1. CONNECT
   void connect(String token, String username) {
     _currentUser = username;
     // Prevent double connection if already active
@@ -101,12 +96,11 @@ class ChatService extends ChangeNotifier {
     isConnected = true;
     notifyListeners();
 
-    // 1. Subscribe to Static Channels
+    // Subscribe to Static Channels
     _subscribe('/topic/server', 'server');
     _subscribe('/topic/local', 'local');
-    _subscribe('/user/queue/messages', 'p2p');
     
-    // 2. Fetch and Resubscribe to user's joined groups from Backend
+    // Fetch and Resubscribe to user's joined groups from Backend
     _restoreJoinedGroups();
   }
 
@@ -119,10 +113,6 @@ class ChatService extends ChangeNotifier {
         final List<dynamic> groupIds = res['data'];
         
         for (var gid in groupIds) {
-          // We call joinGroup here. 
-          // Since the user is already a member, the backend will just return 
-          // the group info (including Name) without adding them again.
-          // This ensures we get the correct Group Name for the UI.
           await joinGroup(gid.toString());
         }
       }
@@ -156,7 +146,7 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  // 2. SEND MESSAGE
+  // SEND MESSAGE
   void sendMessage(String targetId, String content) {
     if (!isConnected || content.trim().isEmpty) return;
 
@@ -188,7 +178,7 @@ class ChatService extends ChangeNotifier {
     );
   }
 
-  // 3. GROUP MANAGEMENT (API + WS)
+  // GROUP MANAGEMENT
   
   Future<void> createGroup(String name) async {
     final res = await Api.request(
@@ -204,8 +194,6 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> joinGroup(String gid) async {
-    // We use the join endpoint. Even if already joined, 
-    // it returns the group details (Name/Members).
     final res = await Api.request(
       "/chat/group/join", 
       method: "POST",
@@ -260,7 +248,6 @@ class ChatService extends ChangeNotifier {
       channel.hasUnread = false;
     });
 
-    // Remove old groups on logout
     _channels.removeWhere((key, val) => val.type == 'GROUP');
 
     _unsubscribeFunctions.clear();

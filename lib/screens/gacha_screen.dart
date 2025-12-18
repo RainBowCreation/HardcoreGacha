@@ -16,6 +16,7 @@ class _GachaScreenState extends State<GachaScreen> {
   bool bannersLoading = false;
   List<dynamic> pullResults = [];
   
+  int? _activePullCount; 
   static const int _kInfiniteStart = 1000;
   int _currentRealIndex = 0;
   late PageController _bannerController;
@@ -114,20 +115,39 @@ class _GachaScreenState extends State<GachaScreen> {
 
   Future<void> _pull(int count) async {
     _handleUserInteraction();
-    if (banners.isEmpty) return;
     
-    final bannerId = banners[_currentRealIndex]['id'];
-    final res = await Api.request("/gacha/pull", method: "POST", body: {"bannerId": bannerId, "count": count});
+    // Prevent duplicate requests
+    if (banners.isEmpty || _activePullCount != null) return;
     
-    if (res['data'] != null && res['data']['result'] != null) {
-      setState(() {
-        pullResults = res['data']['result'];
-      });
-    }
-    else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res['error'] ?? "Pull failed: ${res['error']}"), backgroundColor: Colors.redAccent)
-      );
+    // Set loading state
+    setState(() => _activePullCount = count);
+    
+    try {
+      final bannerId = banners[_currentRealIndex]['id'];
+      final res = await Api.request("/gacha/pull", method: "POST", body: {"bannerId": bannerId, "count": count});
+      
+      if (mounted) {
+        if (res['data'] != null && res['data']['result'] != null) {
+          setState(() {
+            pullResults = res['data']['result'];
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(res['error'] ?? "Pull failed: ${res['error']}"), backgroundColor: Colors.redAccent)
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Network Error"), backgroundColor: Colors.redAccent)
+        );
+      }
+    } finally {
+      // Reset loading state to unlock buttons
+      if (mounted) {
+        setState(() => _activePullCount = null);
+      }
     }
   }
 
@@ -140,7 +160,6 @@ class _GachaScreenState extends State<GachaScreen> {
     }
   }
 
-  // Helper to extract currency type, cost, icon, and color from banner data
   Map<String, dynamic> _getCurrencyDetails(Map<String, dynamic> bannerData) {
     final Map<String, dynamic> currency = bannerData['currency'] ?? {};
     
@@ -152,7 +171,6 @@ class _GachaScreenState extends State<GachaScreen> {
         'type': 'Gem'
       };
     } else {
-      // Default to coin if gem not found or specific coin key exists
       return {
         'cost': currency['coin'] ?? 0,
         'icon': Icons.monetization_on,
@@ -230,7 +248,6 @@ class _GachaScreenState extends State<GachaScreen> {
                                 final b = banners[index];
                                 final active = index == _currentRealIndex;
                                 
-                                // Get Currency Details for this banner
                                 final currDetails = _getCurrencyDetails(b);
                                 final int baseCost = currDetails['cost'];
 
@@ -254,51 +271,64 @@ class _GachaScreenState extends State<GachaScreen> {
                                           children: [
                                             Text(b['name'] ?? "Unknown", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: active ? Colors.white : Colors.grey)),
                                             const SizedBox(height: 8),
-                                            
-                                            // --- CHANGED: Display End Date instead of ID ---
                                             Text(
                                               b['end'] != null ? "Ends: ${b['end']}" : "No Time Limit", 
                                               style: TextStyle(fontSize: 12, color: b['end'] != null ? Colors.redAccent : Colors.greenAccent)
                                             ),
-                                            
                                             const SizedBox(height: 24),
                                             
-                                            // --- CHANGED: Buttons with Currency Icons ---
                                             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                                                 // Single Pull Button
                                                 ElevatedButton(
                                                   style: ElevatedButton.styleFrom(
                                                     backgroundColor: Colors.white, 
                                                     foregroundColor: AppColors.accent,
+                                                    minimumSize: const Size(100, 45), // Prevent resizing
                                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
                                                   ), 
-                                                  onPressed: () => _pull(1), 
-                                                  child: Row(
-                                                    children: [
-                                                      const Text("x1 "),
-                                                      Icon(currDetails['icon'], size: 16, color: currDetails['color']),
-                                                      const SizedBox(width: 4),
-                                                      Text("$baseCost", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                                    ],
-                                                  )
+                                                  // Lock button if any pull is active
+                                                  onPressed: _activePullCount != null ? null : () => _pull(1), 
+                                                  child: _activePullCount == 1 
+                                                    ? const SizedBox(
+                                                        width: 20, 
+                                                        height: 20, 
+                                                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent)
+                                                      )
+                                                    : Row(
+                                                        children: [
+                                                          const Text("x1 "),
+                                                          Icon(currDetails['icon'], size: 16, color: currDetails['color']),
+                                                          const SizedBox(width: 4),
+                                                          Text("$baseCost", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                        ],
+                                                      )
                                                 ),
                                                 const SizedBox(width: 16),
+                                                
                                                 // Multi Pull Button
                                                 ElevatedButton(
                                                   style: ElevatedButton.styleFrom(
                                                     backgroundColor: AppColors.accent, 
                                                     foregroundColor: Colors.white,
+                                                    minimumSize: const Size(100, 45), // Prevent resizing
                                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
                                                   ), 
-                                                  onPressed: () => _pull(10), 
-                                                  child: Row(
-                                                    children: [
-                                                      const Text("x10 "),
-                                                      Icon(currDetails['icon'], size: 16, color: currDetails['color']),
-                                                      const SizedBox(width: 4),
-                                                      Text("${baseCost * 10}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                                    ],
-                                                  )
+                                                  // Lock button if any pull is active
+                                                  onPressed: _activePullCount != null ? null : () => _pull(10), 
+                                                  child: _activePullCount == 10
+                                                    ? const SizedBox(
+                                                        width: 20, 
+                                                        height: 20, 
+                                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
+                                                      )
+                                                    : Row(
+                                                        children: [
+                                                          const Text("x10 "),
+                                                          Icon(currDetails['icon'], size: 16, color: currDetails['color']),
+                                                          const SizedBox(width: 4),
+                                                          Text("${baseCost * 10}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                        ],
+                                                      )
                                                 )
                                               ])
                                           ]

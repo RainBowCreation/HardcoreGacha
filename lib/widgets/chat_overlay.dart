@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Required for Clipboard
-import 'package:flutter/gestures.dart'; // Required for TapGestureRecognizer
+import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:intl/intl.dart';
 import '../core/constants.dart';
 import '../services/chat_service.dart';
-import '../core/api.dart'; // Ensure Api is imported
+import '../core/api.dart';
 
 enum ChatMode { minimized, normal, fullscreen }
 
@@ -20,7 +20,7 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
   final TextEditingController _textCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   
-  ChatMode _mode = ChatMode.normal;
+  ChatMode _mode = ChatMode.minimized;
   String _activeChannelId = 'server';
 
   @override
@@ -63,9 +63,7 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
     }
   }
 
-  // --- NEW: FETCH PLAYER DATA ---
   Future<void> _fetchAndShowMiniProfile(String username) async {
-    // 1. Show Loading Indicator
     showDialog(
       context: context, 
       barrierDismissible: false,
@@ -73,10 +71,8 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
     );
 
     try {
-      // 2. Request Data
       final res = await Api.request("/player/$username");
       
-      // Close Loading Indicator
       if (mounted) Navigator.pop(context);
 
       if (res != null && res['data'] != null) {
@@ -86,7 +82,7 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Ensure loader is closed
+        Navigator.pop(context);
         _showError("Failed to load profile.");
       }
     }
@@ -96,7 +92,7 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
-  // --- NEW: MINI PROFILE DIALOG UI ---
+  // --- MINI PROFILE DIALOG UI ---
   void _showMiniProfileDialog(Map<String, dynamic> data) {
     final displayName = data['displayName'] ?? "Unknown";
     final userId = data['userId'] ?? "???";
@@ -136,7 +132,7 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                 if (towerFloor > 10) ...[
+                if (towerFloor > 10) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
@@ -180,12 +176,6 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
             )
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx), 
-            child: const Text("Close", style: TextStyle(color: Colors.white54))
-          )
-        ],
       )
     );
   }
@@ -213,7 +203,7 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
     double width = 350;
     
     if (_mode == ChatMode.minimized) {
-      height = 50; width = 140;
+      height = 40; width = 50;
     } else if (_mode == ChatMode.fullscreen) {
       height = MediaQuery.of(context).size.height - 140;
       width = MediaQuery.of(context).size.width - 40;
@@ -242,10 +232,8 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.chat_bubble, color: AppColors.accent, size: 18),
-          const SizedBox(width: 8),
-          const Text("Chat", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           if (!_service.isConnected) 
-            const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.wifi_off, size: 12, color: Colors.red))
+            const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.wifi_off, size: 12, color: Colors.red))
         ],
       ),
     );
@@ -345,7 +333,6 @@ class _ChatOverlayState extends State<ChatOverlay> with SingleTickerProviderStat
                     children: [
                       TextSpan(text: "[${DateFormat('HH:mm').format(msg.timestamp)}] ", style: const TextStyle(color: Colors.grey, fontSize: 10)),
                       
-                      // UPDATED: Clickable Sender Name
                       TextSpan(
                         text: "${msg.sender}: ", 
                         style: TextStyle(color: _getNameColor(msg.sender), fontWeight: FontWeight.bold),

@@ -44,11 +44,41 @@ class _LoginScreenState extends State<LoginScreen> {
   final _userController = TextEditingController();
   final _emailController = TextEditingController();
   final _passController = TextEditingController();
+  final _confirmPassController = TextEditingController(); // 1. New controller
   bool loading = false;
+
+  // Simple email validator
+  bool isValidEmail(String email) {
+    return RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+")
+        .hasMatch(email);
+  }
 
   Future<void> submit() async {
     if (loading) return;
+    
+    // 2. Validation Logic
+    if (isRegister) {
+      if (!isValidEmail(_emailController.text.trim())) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please enter a valid email address"))
+          );
+        }
+        return;
+      }
+
+      if (_passController.text != _confirmPassController.text) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Passwords do not match"))
+          );
+        }
+        return;
+      }
+    }
+
     setState(() => loading = true);
+
     if (isRegister) {
       final res = await Api.request(
         "/auth/register",
@@ -61,18 +91,24 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (res['status'] == 200 || res['status'] == 201) {
         setState(() => isRegister = false);
+        // Auto-login after register if token is present
         if (res['data'] != null && res['data']['token'] != null) {
-        widget.onLogin(res['data']['token']);
-      }
-      }
-      else {
-        if (mounted)
+          widget.onLogin(res['data']['token']);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Account created! Please login."))
+            );
+          }
+        }
+      } else {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Error: ${res['error'] ?? 'Unknown'}"))
           );
+        }
       }
-    }
-    else {
+    } else {
       final res = await Api.request(
         "/auth/login",
         method: "POST",
@@ -83,12 +119,12 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (res['data'] != null && res['data']['token'] != null) {
         widget.onLogin(res['data']['token']);
-      }
-      else {
-        if (mounted)
-          ScaffoldMessenger.of(
-            context
-          ).showSnackBar(SnackBar(content: Text("Error: ${res['error']}")));
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error: ${res['error']}"))
+          );
+        }
       }
     }
     setState(() => loading = false);
@@ -132,6 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _emailController,
+                  keyboardType: TextInputType.emailAddress, // Adds @ symbol to keyboard
                   decoration: const InputDecoration(
                     labelText: "Email",
                     border: OutlineInputBorder()
@@ -142,13 +179,30 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _passController,
                 obscureText: true,
-                textInputAction: TextInputAction.done, // Shows "Check" icon on mobile keyboard
-                onSubmitted: (_) => submit(), // Triggers submit when Enter is pressed
+                // Only trigger submit here if NOT registering (since register needs confirm pass)
+                textInputAction: isRegister ? TextInputAction.next : TextInputAction.done,
+                onSubmitted: isRegister ? null : (_) => submit(),
                 decoration: const InputDecoration(
                   labelText: "Password",
                   border: OutlineInputBorder()
                 )
               ),
+              
+              // 3. New Confirm Password Field
+              if (isRegister) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _confirmPassController,
+                  obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => submit(),
+                  decoration: const InputDecoration(
+                    labelText: "Confirm Password",
+                    border: OutlineInputBorder()
+                  )
+                ),
+              ],
+
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -167,7 +221,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 )
               ),
               TextButton(
-                onPressed: () => setState(() => isRegister = !isRegister),
+                onPressed: () {
+                  // Clear errors or fields when switching modes if desired
+                  setState(() => isRegister = !isRegister);
+                },
                 child: Text(
                   isRegister ? "Have account? Login" : "Need account? Register",
                   style: const TextStyle(

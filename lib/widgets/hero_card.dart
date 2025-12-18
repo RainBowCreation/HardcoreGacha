@@ -51,10 +51,9 @@ class HeroCard extends StatelessWidget {
     final displayName = data['displayName'] ?? data['class'] ?? "Unknown";
     final isDeployed = partyColor != null;
 
-    // 1. OUTER CONTAINER (Shadow Only)
     return Container(
       decoration: BoxDecoration(
-        color: Colors.transparent, // Background handled inside ClipRRect
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 5, offset: const Offset(0, 2))
@@ -63,15 +62,13 @@ class HeroCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          color: AppColors.card, // Main Background Color
+          color: AppColors.card,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
 
-              // 2. TOP BORDER STRIP (Rarity)
               Container(height: 4, color: rarityColor),
 
-              // 3. MAIN CONTENT
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -128,17 +125,15 @@ class HeroCard extends StatelessWidget {
                 )
               ),
 
-              // 4. BOTTOM BORDER STRIP (Party Highlight)
+              // BOTTOM BORDER STRIP (Party Highlight)
               if (isDeployed)
               Container(
                 height: 2, 
                 color: partyColor,
                 alignment: Alignment.center
-                // Optional: Add tiny "Deployed" text inside the colored bar
-                // child: const Text("DEPLOYED", style: TextStyle(fontSize: 3, color: Colors.white)), 
               )
               else 
-              const SizedBox(height: 4) // Keep layout consistent size-wise
+              const SizedBox(height: 4)
             ]
           )
         )

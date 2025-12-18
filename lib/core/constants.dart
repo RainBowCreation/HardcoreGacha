@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-const String API_ROOT = "http://localhost:8080";
+const String API_ROOT = "http://sea.main.rainbowcreation.net:8080";
 const String API_BASE = "$API_ROOT/v1";
 
 class AppColors {
