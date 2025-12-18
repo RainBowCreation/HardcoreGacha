@@ -12,7 +12,7 @@ class HardcoreGachaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'HG Client',
+      title: 'Hardcore Gacha',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: AppColors.bg,
