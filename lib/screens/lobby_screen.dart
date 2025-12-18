@@ -206,8 +206,9 @@ class LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
-  Future<void> _executeSynthesis(String fromCid, String toCid, Map<String, dynamic> fromH, Map<String, dynamic> toH) async {
-    final res = await Api.request("/roster/synthesis", method: "POST", body: {"from": fromCid, "to": toCid});
+  // change fromcids to list to support multiple select
+  Future<void> _executeSynthesis(List<String> fromCids, String toCid, Map<String, dynamic> fromH, Map<String, dynamic> toH) async {
+    final res = await Api.request("/roster/synthesis", method: "POST", body: {"from": fromCids, "to": toCid});
     if (res['status'] == 200 && res['data'] != null) {
       setState(() {
           synthesisResult = Map<String, dynamic>.from(res['data']);
@@ -457,7 +458,6 @@ class LobbyScreenState extends State<LobbyScreen> {
 
     return Column(
       children: [
-        // If Narrow Mode, push content down slightly so top content isn't covered by Floating Hamburger
         if (isNarrowMode) const SizedBox(height: 60),
 
         Container(
@@ -499,6 +499,12 @@ class LobbyScreenState extends State<LobbyScreen> {
               if (crossAxisCount > 10) crossAxisCount = 10;
               if (crossAxisCount < 2) crossAxisCount = 2;
 
+              final double spacing = 6.0;
+              final double totalSpacing = (crossAxisCount - 1) * spacing;
+              final double availableWidth = rosterConstraints.maxWidth - totalSpacing; 
+              final double cardWidth = availableWidth / crossAxisCount;
+              final double cardHeight = cardWidth / 0.70;
+
               return Container(
                 decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
                 clipBehavior: Clip.antiAlias,
@@ -513,14 +519,15 @@ class LobbyScreenState extends State<LobbyScreen> {
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: crossAxisCount,
                           childAspectRatio: 0.70,
-                          crossAxisSpacing: 6,
-                          mainAxisSpacing: 6,
+                          crossAxisSpacing: spacing,
+                          mainAxisSpacing: spacing,
                         ),
                         delegate: SliverChildBuilderDelegate(
                           (ctx, i) {
                             final h = roster[i];
                             final cid = h['cid'];
                             Color? color;
+                            
                             if (tempFormation.containsKey(cid) && selectedParty != null) {
                               int idx = parties.indexWhere((p) => p['pid'] == selectedParty['pid']);
                               if (idx != -1) color = partyColors[idx % partyColors.length];
@@ -533,23 +540,24 @@ class LobbyScreenState extends State<LobbyScreen> {
                                 }
                               }
                             }
-                            return DragTarget<String>(
-                              onWillAccept: (fromCid) => fromCid != cid,
-                              onAccept: (fromCid) => _onHeroDroppedOnHero(fromCid, cid),
-                              builder: (context, _, __) => LongPressDraggable<String>(
-                                delay: isMobileMode ? const Duration(milliseconds: 500) : const Duration(milliseconds: 60),
-                                data: cid,
-                                feedback: Material(color: Colors.transparent, child: SizedBox(width: 100, height: 140, child: HeroCard(data: h, onRename: (_, __) {}, partyColor: color))),
-                                childWhenDragging: Opacity(opacity: 0.3, child: HeroCard(data: h, onRename: _renameHero, partyColor: color)),
-                                child: HeroCard(data: h, onRename: _renameHero, partyColor: color)
-                              )
+
+                            return _InteractiveDraggableHero(
+                              key: ValueKey(cid), 
+                              heroData: h,
+                              cid: cid,
+                              partyColor: color,
+                              cardWidth: cardWidth,
+                              cardHeight: cardHeight,
+                              isMobileMode: isMobileMode,
+                              onRename: _renameHero,
+                              onDropAccept: _onHeroDroppedOnHero,
                             );
                           },
                           childCount: roster.length,
                         ),
                       ),
                     ),
-                    if (_totalHeroes > 0)
+                    if (_totalHeroes > 0 || _currentPage > 1)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -570,6 +578,8 @@ class LobbyScreenState extends State<LobbyScreen> {
     int totalPages = (_totalHeroes / 50).ceil();
     if (totalPages < 1) totalPages = 1;
 
+    bool canGoNext = _currentPage < totalPages || (!_isLoadingRoster && roster.length >= 50);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -588,13 +598,15 @@ class LobbyScreenState extends State<LobbyScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              "$_currentPage / $totalPages",
+              (totalPages <= 1 && _currentPage > 1) 
+                ? "Page $_currentPage" 
+                : "$_currentPage / $totalPages",
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
 
           _buildTinyPageBtn(Icons.chevron_right, 
-            enabled: _currentPage < totalPages && !_isLoadingRoster,
+            enabled: canGoNext,
             onTap: () => _loadRoster(page: _currentPage + 1)
           ),
         ],
@@ -799,5 +811,90 @@ class LobbyScreenState extends State<LobbyScreen> {
       'mana': {'max': safeGet(stats['SP'], originalHero['mana']?['max'])},
       'stamina': {'max': safeGet(stats['AP'], originalHero['stamina']?['max'])}
     };
+  }
+}
+
+class _InteractiveDraggableHero extends StatefulWidget {
+  final Map<String, dynamic> heroData;
+  final String cid;
+  final Color? partyColor;
+  final double cardWidth;
+  final double cardHeight;
+  final bool isMobileMode;
+  final Future<void> Function(String, String) onRename;
+  final Function(String, String) onDropAccept;
+
+  const _InteractiveDraggableHero({
+    super.key, // <--- THIS WAS MISSING. It allows key: ValueKey(cid) to work.
+    required this.heroData,
+    required this.cid,
+    required this.partyColor,
+    required this.cardWidth,
+    required this.cardHeight,
+    required this.isMobileMode,
+    required this.onRename,
+    required this.onDropAccept,
+  });
+
+  @override
+  State<_InteractiveDraggableHero> createState() => _InteractiveDraggableHeroState();
+}
+
+class _InteractiveDraggableHeroState extends State<_InteractiveDraggableHero> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<String>(
+      onWillAccept: (fromCid) => fromCid != widget.cid,
+      onAccept: (fromCid) => widget.onDropAccept(fromCid, widget.cid),
+      builder: (context, candidateData, rejectedData) {
+        
+        final bool isTargeted = candidateData.isNotEmpty; 
+
+        return Listener(
+          onPointerDown: (_) => setState(() => _isPressed = true),
+          onPointerUp: (_) => setState(() => _isPressed = false),
+          onPointerCancel: (_) => setState(() => _isPressed = false),
+          child: LongPressDraggable<String>(
+            delay: widget.isMobileMode ? const Duration(milliseconds: 300) : const Duration(milliseconds: 60),
+            data: widget.cid,
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            feedback: Material(
+              color: Colors.transparent, 
+              child: Container(
+                width: widget.cardWidth, 
+                height: widget.cardHeight,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.redAccent, width: 2),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 5))]
+                ),
+                child: HeroCard(data: widget.heroData, onRename: (_, __) {}, partyColor: widget.partyColor)
+              )
+            ),
+            childWhenDragging: Opacity(
+              opacity: 0.3, 
+              child: HeroCard(data: widget.heroData, onRename: widget.onRename, partyColor: widget.partyColor)
+            ),
+            child: Container(
+              color: Colors.transparent, // Fixes Hit Box
+              child: Container(
+                decoration: BoxDecoration(
+                  border: _isPressed 
+                    ? Border.all(color: Colors.redAccent, width: 2) 
+                    : isTargeted 
+                      ? Border.all(color: Colors.greenAccent, width: 3) 
+                      : null,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: isTargeted ? [BoxShadow(color: Colors.green.withOpacity(0.4), blurRadius: 10)] : null
+                ),
+                child: HeroCard(data: widget.heroData, onRename: widget.onRename, partyColor: widget.partyColor)
+              ),
+            )
+          ),
+        );
+      }
+    );
   }
 }

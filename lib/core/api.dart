@@ -17,11 +17,17 @@ class Api {
 
     http.Response response;
     try {
-      if (method == "POST") {
-        response = await http.post(uri, headers: headers, body: jsonEncode(body));
-      } else {
-        response = await http.get(uri, headers: headers);
+      final request = http.Request(method, uri);
+      
+      request.headers.addAll(headers);
+
+      if (body != null) {
+        request.body = jsonEncode(body);
       }
+
+      final streamedResponse = await request.send();
+      
+      response = await http.Response.fromStream(streamedResponse);
 
       if (response.headers['content-type']?.contains('application/json') ?? false) {
         final data = jsonDecode(response.body);
