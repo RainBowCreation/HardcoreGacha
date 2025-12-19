@@ -7,7 +7,6 @@ import '../widgets/hex_grid.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
-
   @override
   State<LobbyScreen> createState() => LobbyScreenState();
 }
@@ -34,13 +33,11 @@ class LobbyScreenState extends State<LobbyScreen> {
   Map<String, dynamic>? synthesisToHero;   
   bool showSynthesisResult = false;
   
-  // --- NEW SYNTHESIS MODE STATE ---
+  // --- SYNTHESIS MODE STATE ---
   bool _isSynthesisMode = false;
   Set<String> _synthesisMaterials = {};
   String? _synthesisTarget;
-  // -------------------------------
-
-  // UI State
+  int _autoSelectLevel = 0; 
   bool? _isSidebarCollapsed;
   bool _isNarrowSidebarOpen = false;
 
@@ -81,6 +78,8 @@ class LobbyScreenState extends State<LobbyScreen> {
     setState(() {
       _isLoadingRoster = true;
       _currentPage = page;
+      // Reset auto-select when changing pages
+      _autoSelectLevel = 0; 
     });
 
     final res = await Api.request("/roster/info/all", query: {"page": page.toString()});
@@ -134,10 +133,11 @@ class LobbyScreenState extends State<LobbyScreen> {
           }
           hasUnsavedChanges = false;
           
-          // Ensure synthesis mode is off when selecting party to avoid confusion
+          // Ensure synthesis mode is off when selecting party
           _isSynthesisMode = false;
           _synthesisMaterials.clear();
           _synthesisTarget = null;
+          _autoSelectLevel = 0;
         }
       );
     }
@@ -208,17 +208,36 @@ class LobbyScreenState extends State<LobbyScreen> {
       // Reset selections when toggling
       _synthesisMaterials.clear();
       _synthesisTarget = null;
+      _autoSelectLevel = 0;
+    });
+  }
+
+  void _setRarityAutoSelectLevel(int level) {
+    setState(() {
+      if (_autoSelectLevel == level) {
+        _autoSelectLevel = 0;
+      } else {
+        _autoSelectLevel = level;
+      }
+      
+      _synthesisMaterials.clear();
+      if (_autoSelectLevel == 0) return;
+      for (var h in roster) {
+        int r = h['rarity'] ?? 1; 
+        String cid = h['cid'];
+        if (r <= _autoSelectLevel && cid != _synthesisTarget) {
+          _synthesisMaterials.add(cid);
+        }
+      }
     });
   }
 
   // Single Click in Synthesis Mode
   void _onSynthesisHeroTap(String cid) {
     if (_synthesisTarget == cid) {
-      // If tapping the Target, trigger confirmation
       _confirmMultiSynthesis();
     } else {
       setState(() {
-        // Toggle material selection
         if (_synthesisMaterials.contains(cid)) {
           _synthesisMaterials.remove(cid);
         } else {
@@ -232,7 +251,6 @@ class LobbyScreenState extends State<LobbyScreen> {
   void _onSynthesisHeroSetTarget(String cid) {
     setState(() {
       if (_synthesisTarget == cid) {
-        // Deselect if already target
         _synthesisTarget = null;
       } else {
         _synthesisTarget = cid;
@@ -251,7 +269,6 @@ class LobbyScreenState extends State<LobbyScreen> {
     final toHero = roster.firstWhere((h) => h['cid'] == _synthesisTarget, orElse: () => null);
     if (toHero == null) return;
     
-    // For display in dialog, just show first material name + count
     final firstMatCid = _synthesisMaterials.first;
     final firstMat = roster.firstWhere((h) => h['cid'] == firstMatCid, orElse: () => null);
     
@@ -260,7 +277,6 @@ class LobbyScreenState extends State<LobbyScreen> {
       matsText += " and ${_synthesisMaterials.length - 1} others";
     }
 
-    // Dummy "fromHero" for the result view logic (visual only)
     Map<String, dynamic> dummyFromHero = firstMat != null ? Map.from(firstMat) : {};
     dummyFromHero['displayName'] = "Selected Materials";
 
@@ -277,7 +293,7 @@ class LobbyScreenState extends State<LobbyScreen> {
               Navigator.pop(ctx);
               _executeSynthesis(_synthesisMaterials.toList(), _synthesisTarget!, dummyFromHero, toHero); 
             }, 
-            child: const Text("CONFIRM")
+            child: const Text("CONFIRM", style: TextStyle(color: Colors.white))
           )
         ]
       )
@@ -304,7 +320,7 @@ class LobbyScreenState extends State<LobbyScreen> {
               Navigator.pop(ctx); 
               _executeSynthesis([fromCid], toCid, fromHero, toHero); 
             }, 
-            child: const Text("CONFIRM")
+            child: const Text("CONFIRM", style: TextStyle(color: Colors.white))
           )
         ]
       )
@@ -312,7 +328,6 @@ class LobbyScreenState extends State<LobbyScreen> {
   }
   // --- SYNTHESIS LOGIC END ---
 
-  // Updated to accept List<String> for fromCids
   Future<void> _executeSynthesis(List<String> fromCids, String toCid, Map<String, dynamic> fromH, Map<String, dynamic> toH) async {
     final res = await Api.request("/roster/synthesis", method: "POST", body: {"from": fromCids, "to": toCid});
     if (res['status'] == 200 && res['data'] != null) {
@@ -322,11 +337,10 @@ class LobbyScreenState extends State<LobbyScreen> {
           synthesisToHero = toH;   
           showSynthesisResult = true;
           selectedParty = null; 
-          
-          // Reset mode after successful synth
           _isSynthesisMode = false;
           _synthesisMaterials.clear();
           _synthesisTarget = null;
+          _autoSelectLevel = 0;
         }
       );
       _loadRosterCount();
@@ -371,7 +385,6 @@ class LobbyScreenState extends State<LobbyScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: content,
               ),
-
               
               if (!_isNarrowSidebarOpen)
                 Positioned(
@@ -444,7 +457,7 @@ class LobbyScreenState extends State<LobbyScreen> {
                 height: 50,
                 child: Center(
                   child: IconButton(
-                    icon: Icon(Icons.menu),
+                    icon: const Icon(Icons.menu),
                     onPressed: () {
                       if (isNarrowMode) {
                         setState(() => _isNarrowSidebarOpen = false);
@@ -460,32 +473,65 @@ class LobbyScreenState extends State<LobbyScreen> {
 
           const SizedBox(height: 8),
 
-          // --- SYNTHESIS TOGGLE BUTTON START ---
-          SizedBox(
-            width: double.infinity,
-            child: Tooltip(
-              message: "Toggle Synthesis Mode",
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isSynthesisMode ? Colors.amber[700] : Colors.grey[800],
-                  foregroundColor: Colors.white,
-                  padding: isCollapsed ? EdgeInsets.zero : const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: _isSynthesisMode ? 6 : 2,
-                ),
-                onPressed: _toggleSynthesisMode,
-                child: isCollapsed 
-                  ? const Icon(Icons.construction, size: 20) 
-                  : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [Icon(Icons.construction, size: 16), SizedBox(width: 8), Text("SYNTHESIS")]
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: _isSynthesisMode ? [BoxShadow(color: Colors.amber.withOpacity(0.1), blurRadius: 8)] : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Synthesis Toggle
+                SizedBox(
+                  width: double.infinity,
+                  child: Tooltip(
+                    message: "Toggle Synthesis Mode",
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isSynthesisMode ? Colors.amber[700] : Colors.grey[800],
+                        foregroundColor: Colors.white,
+                        padding: isCollapsed ? EdgeInsets.zero : const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: _isSynthesisMode 
+                            // If mode is on, flatten bottom corners to connect to battery
+                            ? const BorderRadius.vertical(top: Radius.circular(8), bottom: Radius.zero)
+                            : BorderRadius.circular(8)
+                        ),
+                        elevation: _isSynthesisMode ? 0 : 2,
+                      ),
+                      onPressed: _toggleSynthesisMode,
+                      child: isCollapsed 
+                        ? const Icon(Icons.construction, size: 20) 
+                        : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [Icon(Icons.construction, size: 16), SizedBox(width: 8), Text("SYNTHESIS")]
+                        )
+                    ),
                   )
-              ),
-            )
-          ),
-          // --- SYNTHESIS TOGGLE BUTTON END ---
+                ),
 
-          const SizedBox(height: 8),
+                if (_isSynthesisMode)
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[900], 
+                      border: Border.all(color: Colors.amber[700]!, width: 4),
+                      borderRadius: const BorderRadius.vertical(top: Radius.zero, bottom: Radius.circular(8))
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: isCollapsed
+                      ? Column( // Vertical Stack for collapsed sidebar
+                          children: [1, 2, 3, 4].map((r) => _buildBatterySegment(r, true)).toList(),
+                        )
+                      : Row( // Horizontal Stack for expanded sidebar
+                          children: [1, 2, 3, 4].map((r) => Expanded(child: _buildBatterySegment(r, false))).toList(),
+                        ),
+                  ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
 
           SizedBox(
             width: double.infinity,
@@ -588,6 +634,43 @@ class LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
+  Widget _buildBatterySegment(int rarity, bool isVertical) {
+    bool isActive = rarity <= _autoSelectLevel;
+    Color activeColor = AppColors.getRarityColor(rarity);
+    final Color borderColor = Colors.amber[700]!;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _setRarityAutoSelectLevel(rarity),
+        child: Container(
+          height: isVertical ? 30 : 40, 
+          alignment: Alignment.center,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            // The Visual Indicator (Smaller than the touch area)
+            height: isVertical ? 16 : 24, 
+            // In horizontal mode, width flexes (via Expanded parent) minus margin. 
+            // In vertical mode, fixed width to look like a stack.
+            width: isVertical ? 28 : null, 
+            margin: isVertical ? null : const EdgeInsets.symmetric(horizontal: 4),
+            
+            decoration: BoxDecoration(
+              color: isActive ? activeColor : Colors.transparent,
+              
+              border: Border.all(
+                color: borderColor, 
+                width: 4
+              ),
+              
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMainContent(BoxConstraints constraints, bool isNarrowMode) {
     final bool isMobileMode = constraints.maxWidth < 600;
 
@@ -659,71 +742,78 @@ class LobbyScreenState extends State<LobbyScreen> {
                 clipBehavior: Clip.antiAlias,
                 child: _isLoadingRoster 
                 ? const Center(child: CircularProgressIndicator())
-                : CustomScrollView(
-                  controller: _rosterScrollController,
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.all(8),
-                      sliver: SliverGrid(
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: crossAxisCount,
-                          childAspectRatio: 0.70,
-                          crossAxisSpacing: spacing,
-                          mainAxisSpacing: spacing,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (ctx, i) {
-                            final h = roster[i];
-                            final cid = h['cid'];
-                            Color? color;
-                            
-                            if (tempFormation.containsKey(cid) && selectedParty != null) {
-                              int idx = parties.indexWhere((p) => p['pid'] == selectedParty['pid']);
-                              if (idx != -1) color = partyColors[idx % partyColors.length];
-                            }
-                            else {
-                              for (int pIdx = 0; pIdx < parties.length; pIdx++) {
-                                if (parties[pIdx]['pid'] != (selectedParty?['pid']) && parties[pIdx]['formation'] != null && (parties[pIdx]['formation'] as Map).containsKey(cid)) {
-                                  color = partyColors[pIdx % partyColors.length].withOpacity(0.5);
-                                  break;
+                : Stack(
+                  children: [
+                    // The Scrollable Grid
+                    CustomScrollView(
+                      controller: _rosterScrollController,
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.all(8),
+                          sliver: SliverGrid(
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              childAspectRatio: 0.70,
+                              crossAxisSpacing: spacing,
+                              mainAxisSpacing: spacing,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (ctx, i) {
+                                final h = roster[i];
+                                final cid = h['cid'];
+                                Color? color;
+                                
+                                if (tempFormation.containsKey(cid) && selectedParty != null) {
+                                  int idx = parties.indexWhere((p) => p['pid'] == selectedParty['pid']);
+                                  if (idx != -1) color = partyColors[idx % partyColors.length];
                                 }
-                              }
-                            }
+                                else {
+                                  for (int pIdx = 0; pIdx < parties.length; pIdx++) {
+                                    if (parties[pIdx]['pid'] != (selectedParty?['pid']) && parties[pIdx]['formation'] != null && (parties[pIdx]['formation'] as Map).containsKey(cid)) {
+                                      color = partyColors[pIdx % partyColors.length].withOpacity(0.5);
+                                      break;
+                                    }
+                                  }
+                                }
 
-                            // --- SYNTHESIS HIGHLIGHT LOGIC ---
-                            bool isMaterial = _synthesisMaterials.contains(cid);
-                            bool isTarget = _synthesisTarget == cid;
+                                // --- SYNTHESIS HIGHLIGHT LOGIC ---
+                                bool isMaterial = _synthesisMaterials.contains(cid);
+                                bool isTarget = _synthesisTarget == cid;
 
-                            return _InteractiveDraggableHero(
-                              key: ValueKey(cid), 
-                              heroData: h,
-                              cid: cid,
-                              partyColor: color,
-                              cardWidth: cardWidth,
-                              cardHeight: cardHeight,
-                              isMobileMode: isMobileMode,
-                              onRename: _renameHero,
-                              onDropAccept: _onHeroDroppedOnHero,
-                              
-                              // New Props
-                              isSynthesisMode: _isSynthesisMode,
-                              isSynthesisMaterial: isMaterial,
-                              isSynthesisTarget: isTarget,
-                              onSynthesisTap: () => _onSynthesisHeroTap(cid),
-                              onSynthesisSetTarget: () => _onSynthesisHeroSetTarget(cid),
-                            );
-                          },
-                          childCount: roster.length,
+                                return _InteractiveDraggableHero(
+                                  key: ValueKey(cid), 
+                                  heroData: h,
+                                  cid: cid,
+                                  partyColor: color,
+                                  cardWidth: cardWidth,
+                                  cardHeight: cardHeight,
+                                  isMobileMode: isMobileMode,
+                                  onRename: _renameHero,
+                                  onDropAccept: _onHeroDroppedOnHero,
+                                  isSynthesisMode: _isSynthesisMode,
+                                  isSynthesisMaterial: isMaterial,
+                                  isSynthesisTarget: isTarget,
+                                  onSynthesisTap: () => _onSynthesisHeroTap(cid),
+                                  onSynthesisSetTarget: () => _onSynthesisHeroSetTarget(cid),
+                                );
+                              },
+                              childCount: roster.length,
+                            ),
+                          ),
                         ),
-                      ),
+                        // Add padding at bottom so last row isn't covered by overlay buttons
+                        const SliverPadding(padding: EdgeInsets.only(bottom: 60)),
+                      ],
                     ),
-                    if (_totalHeroes > 0 || _currentPage > 1)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
+
+                    // The Floating Page Selector Overlay
+                    if ((_totalHeroes > 0 || _currentPage > 1) && _autoSelectLevel == 0)
+                      Positioned(
+                        bottom: 16,
+                        left: 0,
+                        right: 0,
                         child: Center(child: _buildCompactPageSelector()),
-                      ),
-                    )
+                      )
                   ],
                 ),
               );
@@ -737,7 +827,6 @@ class LobbyScreenState extends State<LobbyScreen> {
   Widget _buildCompactPageSelector() {
     int totalPages = (_totalHeroes / 50).ceil();
     if (totalPages <= 1) return Container();
-
     bool canGoNext = _currentPage < totalPages || (!_isLoadingRoster && roster.length >= 50);
 
     return Container(
@@ -745,7 +834,10 @@ class LobbyScreenState extends State<LobbyScreen> {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white24)
+        border: Border.all(color: Colors.white24),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 8, offset: const Offset(0, 4))
+        ]
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min, 
@@ -764,7 +856,6 @@ class LobbyScreenState extends State<LobbyScreen> {
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
             ) ,
           ),
-
           _buildTinyPageBtn(Icons.chevron_right, 
             enabled: canGoNext,
             onTap: () => _loadRoster(page: _currentPage + 1)
@@ -793,12 +884,9 @@ class LobbyScreenState extends State<LobbyScreen> {
 
     final consumed = synthesisFromHero ?? {};
     final resultData = synthesisResult!['data'] ?? synthesisResult!;
-
     final afterStats = Map<String, dynamic>.from(resultData['after'] ?? {});
-
     final oldHero = synthesisToHero!;
     final oldStats = oldHero['stats'] ?? {};
-
     final afterCardData = _mapSynthesisToCardData(afterStats, oldHero);
 
     return Container(
@@ -886,7 +974,7 @@ class LobbyScreenState extends State<LobbyScreen> {
             )
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -983,8 +1071,6 @@ class _InteractiveDraggableHero extends StatefulWidget {
   final bool isMobileMode;
   final Future<void> Function(String, String) onRename;
   final Function(String, String) onDropAccept;
-
-  // New Synthesis Props
   final bool isSynthesisMode;
   final bool isSynthesisMaterial;
   final bool isSynthesisTarget;
@@ -1001,8 +1087,6 @@ class _InteractiveDraggableHero extends StatefulWidget {
     required this.isMobileMode,
     required this.onRename,
     required this.onDropAccept,
-    
-    // Default values for standard mode
     this.isSynthesisMode = false,
     this.isSynthesisMaterial = false,
     this.isSynthesisTarget = false,
