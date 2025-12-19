@@ -215,7 +215,7 @@ class _MainDashboardState extends State<MainDashboard> {
             });
           },
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.star), label: "GACHA"),
+            BottomNavigationBarItem(icon: Icon(Icons.store), label: "Store"),
             BottomNavigationBarItem(icon: Icon(Icons.home), label: "LOBBY"),
             BottomNavigationBarItem(icon: Icon(Icons.person), label: "PROFILE"),
           ]

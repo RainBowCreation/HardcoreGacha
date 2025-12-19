@@ -119,21 +119,28 @@ class LobbyScreenState extends State<LobbyScreen> {
   }
 
   void _selectParty(dynamic p) {
-    setState(() {
-        selectedParty = p;
-        showSynthesisResult = false;
-        tempFormation = {};
-        if (p['formation'] != null && p['formation'] is Map) {
-          (p['formation'] as Map).forEach((k, v) => tempFormation[k] = List<int>.from(v));
-        }
-        hasUnsavedChanges = false;
-        
-        // Ensure synthesis mode is off when selecting party to avoid confusion
-        _isSynthesisMode = false;
-        _synthesisMaterials.clear();
-        _synthesisTarget = null;
+    if (selectedParty!=null) {
+      if (selectedParty['pid'] == p['pid']) {
+        setState(() { selectedParty = null; });
       }
-    );
+    }
+    else {
+      setState(() {
+          selectedParty = p;
+          showSynthesisResult = false;
+          tempFormation = {};
+          if (p['formation'] != null && p['formation'] is Map) {
+            (p['formation'] as Map).forEach((k, v) => tempFormation[k] = List<int>.from(v));
+          }
+          hasUnsavedChanges = false;
+          
+          // Ensure synthesis mode is off when selecting party to avoid confusion
+          _isSynthesisMode = false;
+          _synthesisMaterials.clear();
+          _synthesisTarget = null;
+        }
+      );
+    }
   }
 
   Future<void> _saveFormation() async {
@@ -348,7 +355,7 @@ class LobbyScreenState extends State<LobbyScreen> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final bool isNarrowMode = constraints.maxWidth < 500;
+        final bool isNarrowMode = constraints.maxWidth < 600;
         
         final bool shouldAutoMinimize = 220 > (constraints.maxWidth * 0.2);
         final bool isCollapsed = _isSidebarCollapsed ?? shouldAutoMinimize;
@@ -365,10 +372,11 @@ class LobbyScreenState extends State<LobbyScreen> {
                 child: content,
               ),
 
+              
               if (!_isNarrowSidebarOpen)
                 Positioned(
-                  left: 16, 
-                  top: 16,
+                  left: 21, 
+                  top: 21,
                   child: Container(
                     decoration: BoxDecoration(
                       color: AppColors.card, 
@@ -589,40 +597,41 @@ class LobbyScreenState extends State<LobbyScreen> {
 
     return Column(
       children: [
-        if (isNarrowMode) const SizedBox(height: 60),
-
-        Container(
-          height: 240,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(12)
+        if (selectedParty != null) 
+          Container(
+            height: (constraints.maxWidth < 800)? 190: 240,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(12)
+            ),
+            child: selectedParty == null
+              ? const Center(child: Text(""))
+              : Column(children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      GestureDetector(
+                        onTap: () => _showTextInputDialog("Rename", selectedParty['partyName'] ?? "", (v) => _renameParty(selectedParty['pid'], v)),
+                        child: Text(selectedParty['partyName'] ?? "Unknown", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.edit, size: 14, color: Colors.grey)
+                    ]),
+                  if (hasUnsavedChanges)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
+                      icon: const Icon(Icons.check, size: 14),
+                      label: const Text("SAVE CHANGES"),
+                      onPressed: _saveFormation)),
+                  const SizedBox(height: 12),
+                  Expanded(child: HexFormationView(formation: tempFormation, roster: roster, onHeroDrop: _onHeroDroppedOnHex, onHeroRemove: _onHeroRemoved))
+                ])
           ),
-          child: selectedParty == null
-            ? const Center(child: Text(""))
-            : Column(children: [
-                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    GestureDetector(
-                      onTap: () => _showTextInputDialog("Rename", selectedParty['partyName'] ?? "", (v) => _renameParty(selectedParty['pid'], v)),
-                      child: Text(selectedParty['partyName'] ?? "Unknown", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.edit, size: 14, color: Colors.grey)
-                  ]),
-                if (hasUnsavedChanges)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
-                    icon: const Icon(Icons.check, size: 14),
-                    label: const Text("SAVE CHANGES"),
-                    onPressed: _saveFormation)),
-                const SizedBox(height: 12),
-                Expanded(child: HexFormationView(formation: tempFormation, roster: roster, onHeroDrop: _onHeroDroppedOnHex, onHeroRemove: _onHeroRemoved))
-              ])
-        ),
+
         const SizedBox(height: 16),
         // Roster header with Synthesis indicator
         Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Padding(padding: EdgeInsets.only(left: 4, bottom: 4), child: Text("Roster", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))),
           ],

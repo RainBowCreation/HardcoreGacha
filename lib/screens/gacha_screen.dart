@@ -11,7 +11,8 @@ class GachaScreen extends StatefulWidget {
   State<GachaScreen> createState() => _GachaScreenState();
 }
 
-class _GachaScreenState extends State<GachaScreen> {
+class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin {
+  // --- Original State Variables ---
   List<dynamic> banners = [];
   bool bannersLoading = false;
   List<dynamic> pullResults = [];
@@ -24,9 +25,28 @@ class _GachaScreenState extends State<GachaScreen> {
   Timer? _pauseTimer;
   Timer? _refreshTimer;
 
+  // --- Animation & Store State ---
+  List<dynamic> _overlayQueue = []; 
+  Map<String, dynamic>? _currentOverlayHero; 
+  late AnimationController _overlayController;
+  late Animation<double> _scaleAnimation;
+
+  final List<Map<String, dynamic>> _storeItems = List.generate(8, (index) => {
+    "name": "Pack ${index + 1}",
+    "price": "\$${(index + 1) * 4 + 0.99}",
+    "gems": (index + 1) * 500,
+    "color": Colors.primaries[index % Colors.primaries.length],
+  });
+
   @override
   void initState() {
     super.initState();
+    _overlayController = AnimationController(
+      vsync: this, 
+      duration: const Duration(milliseconds: 800)
+    );
+    _scaleAnimation = CurvedAnimation(parent: _overlayController, curve: Curves.elasticOut);
+
     _bannerController = PageController(viewportFraction: 0.9, initialPage: _kInfiniteStart);
     _loadBanners();
     _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) => _loadBanners(silent: true));
@@ -37,9 +57,11 @@ class _GachaScreenState extends State<GachaScreen> {
     _refreshTimer?.cancel();
     _stopAutoSlide();
     _bannerController.dispose();
+    _overlayController.dispose();
     super.dispose();
   }
 
+  // --- Original Banner Logic (Strictly Preserved) ---
   Future<void> _loadBanners({bool silent = false}) async {
     if (bannersLoading) return;
     if (!silent) setState(() => bannersLoading = true);
@@ -118,13 +140,10 @@ class _GachaScreenState extends State<GachaScreen> {
     }
   }
 
+  // --- Pull Logic ---
   Future<void> _pull(int count) async {
     _handleUserInteraction();
-
-    // Prevent duplicate requests
     if (banners.isEmpty || _activePullCount != null) return;
-
-    // Set loading state
     setState(() => _activePullCount = count);
 
     try {
@@ -133,10 +152,14 @@ class _GachaScreenState extends State<GachaScreen> {
 
       if (mounted) {
         if (res['data'] != null && res['data']['result'] != null) {
+          final results = res['data']['result'] as List;
           setState(() {
-              pullResults = res['data']['result'];
-            }
-          );
+            pullResults = results;
+            _overlayQueue = results.where((h) => (h['rarity'] ?? 0) >= 6).toList();
+          });
+          if (_overlayQueue.isNotEmpty) {
+            _showNextOverlay();
+          }
         }
         else {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -153,10 +176,22 @@ class _GachaScreenState extends State<GachaScreen> {
       }
     }
     finally {
-      // Reset loading state to unlock buttons
       if (mounted) {
         setState(() => _activePullCount = null);
       }
+    }
+  }
+
+  void _showNextOverlay() {
+    if (_overlayQueue.isNotEmpty) {
+      setState(() {
+        _currentOverlayHero = _overlayQueue.removeAt(0);
+      });
+      _overlayController.forward(from: 0.0);
+    } else {
+      setState(() {
+        _currentOverlayHero = null;
+      });
     }
   }
 
@@ -172,28 +207,15 @@ class _GachaScreenState extends State<GachaScreen> {
 
   Map<String, dynamic> _getCurrencyDetails(Map<String, dynamic> bannerData) {
     final Map<String, dynamic> currency = bannerData['currency'] ?? {};
-
     if (currency.containsKey('gem')) {
-      return {
-        'cost': currency['gem'] ?? 0,
-        'icon': AppIcons.gem,
-        'color': AppColors.gem,
-        'type': 'Gem'
-      };
-    }
-    else {
-      return {
-        'cost': currency['coin'] ?? 0,
-        'icon': AppIcons.coin,
-        'color': AppColors.coin,
-        'type': 'Coin'
-      };
+      return {'cost': currency['gem'] ?? 0, 'icon': AppIcons.gem, 'color': AppColors.gem, 'type': 'Gem'};
+    } else {
+      return {'cost': currency['coin'] ?? 0, 'icon': AppIcons.coin, 'color': AppColors.coin, 'type': 'Coin'};
     }
   }
 
   void _showRateInfo(Map<String, dynamic> rawRates) {
     _stopAutoSlide();
-
     double totalWeight = 0.0;
     rawRates.forEach((k, v) => totalWeight += (v as num).toDouble());
     List<int> sortedRarities = rawRates.keys.map((k) => int.parse(k)).toList()..sort((a, b) => b.compareTo(a));
@@ -215,17 +237,9 @@ class _GachaScreenState extends State<GachaScreen> {
               if (weight <= 0) return const SizedBox.shrink();
               return Row(
                 children: [
-                  RarityContainer(
-                    rarity: r,
-                    width: 12,
-                    height: 12,
-                    shape: BoxShape.circle
-                  ),
+                  RarityContainer(rarity: r, width: 12, height: 12, shape: BoxShape.circle),
                   const SizedBox(width: 8),
-                  RarityText(
-                    AppColors.getRarityLabel(r), 
-                    rarity: r
-                  ),
+                  RarityText(AppColors.getRarityLabel(r), rarity: r),
                   const Spacer(),
                   Text("${percentage.toStringAsFixed(3)}%", style: const TextStyle(color: Colors.white70))
                 ]
@@ -240,179 +254,310 @@ class _GachaScreenState extends State<GachaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          // Banners
-          SizedBox(
-            height: 260, 
-            child: bannersLoading 
-              ? const Center(child: CircularProgressIndicator()) 
-              : banners.isEmpty 
-                ? const Center(child: Text("No Banners")) 
-                : Column(
-                  children: [
-                    Expanded(
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          PageView.builder(
-                            key: ValueKey(banners.length), 
-                            controller: _bannerController, 
-                            itemCount: banners.length * 10000, 
-                            onPageChanged: (i) => setState(() => _currentRealIndex = i % banners.length), 
-                            itemBuilder: (ctx, i) {
-                              final index = i % banners.length;
-                              final b = banners[index];
-                              final active = index == _currentRealIndex;
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          child: Column(
+            children: [
+              const SizedBox(height: 16),
+              
+              // --- ORIGINAL BANNER UI ---
+              SizedBox(
+                height: 260, 
+                child: bannersLoading 
+                  ? const Center(child: CircularProgressIndicator()) 
+                  : banners.isEmpty 
+                    ? const Center(child: Text("No Banners")) 
+                    : Column(
+                      children: [
+                        Expanded(
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              PageView.builder(
+                                key: ValueKey(banners.length), 
+                                controller: _bannerController, 
+                                itemCount: banners.length * 10000, 
+                                onPageChanged: (i) => setState(() => _currentRealIndex = i % banners.length), 
+                                itemBuilder: (ctx, i) {
+                                  final index = i % banners.length;
+                                  final b = banners[index];
+                                  final active = index == _currentRealIndex;
+                                  final currDetails = _getCurrencyDetails(b);
+                                  final int baseCost = currDetails['cost'];
 
-                              final currDetails = _getCurrencyDetails(b);
-                              final int baseCost = currDetails['cost'];
-
-                              return AnimatedScale(
-                                scale: active ? 1.0 : 0.9, 
-                                duration: const Duration(milliseconds: 200), 
-                                child: Stack(
-                                  children: [
-                                    Container(
-                                      width: double.infinity,
-                                      margin: const EdgeInsets.symmetric(horizontal: 4), 
-                                      decoration: BoxDecoration(
-                                        gradient: active
-                                          ? LinearGradient(
-                                            colors: [
-                                              AppColors.accent, 
-                                              AppColors.accent.withOpacity(0.6)
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight
-                                          )
-                                          : const LinearGradient(
-                                            colors: [
-                                              AppColors.card, 
-                                              AppColors.bg
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight
-                                          ),
-                                        borderRadius: BorderRadius.circular(16), 
-                                        border: Border.all(color: active ? AppColors.accent : Colors.white10)
-                                      ), 
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center, 
-                                        children: [
-                                          Text(b['name'] ?? "Unknown", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: active ? Colors.white : Colors.grey)),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            b['end'] != null ? "Ends: ${b['end']}" : "No Time Limit", 
-                                            style: TextStyle(fontSize: 12, color: b['end'] != null ? Colors.redAccent : Colors.greenAccent)
-                                          ),
-                                          const SizedBox(height: 24),
-
-                                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                              // Single Pull Button
-                                              ElevatedButton(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.white, 
-                                                  foregroundColor: AppColors.accent,
-                                                  minimumSize: const Size(100, 45), // Prevent resizing
-                                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
-                                                ), 
-                                                // Lock button if any pull is active
-                                                onPressed: _activePullCount != null ? null : () => _pull(1), 
-                                                child: _activePullCount == 1 
-                                                  ? const SizedBox(
-                                                    width: 20, 
-                                                    height: 20, 
-                                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent)
-                                                  )
-                                                  : Row(
-                                                    children: [
-                                                      const Text("x1 "),
-                                                      Icon(currDetails['icon'], size: 16, color: currDetails['color']),
-                                                      const SizedBox(width: 4),
-                                                      Text("$baseCost", style: const TextStyle(fontWeight: FontWeight.bold))
-                                                    ]
-                                                  )
-                                              ),
-                                              const SizedBox(width: 16),
-
-                                              // Multi Pull Button
-                                              ElevatedButton(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: AppColors.accent, 
-                                                  foregroundColor: Colors.white,
-                                                  minimumSize: const Size(100, 45), // Prevent resizing
-                                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
-                                                ), 
-                                                // Lock button if any pull is active
-                                                onPressed: _activePullCount != null ? null : () => _pull(10), 
-                                                child: _activePullCount == 10
-                                                  ? const SizedBox(
-                                                    width: 20, 
-                                                    height: 20, 
-                                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
-                                                  )
-                                                  : Row(
-                                                    children: [
-                                                      const Text("x10 "),
-                                                      Icon(currDetails['icon'], size: 16, color: currDetails['color']),
-                                                      const SizedBox(width: 4),
-                                                      Text("${baseCost * 10}", style: const TextStyle(fontWeight: FontWeight.bold))
-                                                    ]
-                                                  )
+                                  return AnimatedScale(
+                                    scale: active ? 1.0 : 0.9, 
+                                    duration: const Duration(milliseconds: 200), 
+                                    child: Stack(
+                                      children: [
+                                        Container(
+                                          width: double.infinity,
+                                          margin: const EdgeInsets.symmetric(horizontal: 4), 
+                                          decoration: BoxDecoration(
+                                            gradient: active
+                                              ? LinearGradient(
+                                                colors: [AppColors.accent, AppColors.accent.withOpacity(0.6)],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight
                                               )
-                                            ])
-                                        ]
-                                      )
-                                    ),
-                                    Positioned(
-                                      top: 12, right: 16,
-                                      child: InkWell(
-                                        onTap: () => _showRateInfo(b['rate'] ?? {}),
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle, border: Border.all(color: Colors.white24)),
-                                          child: const Icon(Icons.question_mark, size: 16, color: Colors.white70)
+                                              : const LinearGradient(
+                                                colors: [AppColors.card, AppColors.bg],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight
+                                              ),
+                                            borderRadius: BorderRadius.circular(16), 
+                                            border: Border.all(color: active ? AppColors.accent : Colors.white10)
+                                          ), 
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center, 
+                                            children: [
+                                              Text(b['name'] ?? "Unknown", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: active ? Colors.white : Colors.grey)),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                b['end'] != null ? "Ends: ${b['end']}" : "No Time Limit", 
+                                                style: TextStyle(fontSize: 12, color: b['end'] != null ? Colors.redAccent : Colors.greenAccent)
+                                              ),
+                                              const SizedBox(height: 24),
+                                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.white, 
+                                                      foregroundColor: AppColors.accent,
+                                                      minimumSize: const Size(100, 45), 
+                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+                                                    ), 
+                                                    onPressed: _activePullCount != null ? null : () => _pull(1), 
+                                                    child: _activePullCount == 1 
+                                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
+                                                      : Row(children: [const Text("x1 "), Icon(currDetails['icon'], size: 16, color: currDetails['color']), const SizedBox(width: 4), Text("$baseCost", style: const TextStyle(fontWeight: FontWeight.bold))])
+                                                  ),
+                                                  const SizedBox(width: 16),
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: AppColors.accent, 
+                                                      foregroundColor: Colors.white,
+                                                      minimumSize: const Size(100, 45), 
+                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+                                                    ), 
+                                                    onPressed: _activePullCount != null ? null : () => _pull(10), 
+                                                    child: _activePullCount == 10
+                                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                                      : Row(children: [const Text("x10 "), Icon(currDetails['icon'], size: 16, color: currDetails['color']), const SizedBox(width: 4), Text("${baseCost * 10}", style: const TextStyle(fontWeight: FontWeight.bold))])
+                                                  )
+                                                ])
+                                            ]
+                                          )
+                                        ),
+                                        Positioned(
+                                          top: 12, right: 16,
+                                          child: InkWell(
+                                            onTap: () => _showRateInfo(b['rate'] ?? {}),
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle, border: Border.all(color: Colors.white24)),
+                                              child: const Icon(Icons.question_mark, size: 16, color: Colors.white70)
+                                            )
+                                          )
                                         )
-                                      )
+                                      ]
                                     )
-                                  ]
-                                )
-                              );
-                            }
-                          ),
-                          if (banners.length > 1) ...[
-                            Positioned(left: 0, child: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white24), onPressed: () => _scrollBanner(-1))),
-                            Positioned(right: 0, child: IconButton(icon: const Icon(Icons.arrow_forward_ios, color: Colors.white24), onPressed: () => _scrollBanner(1)))
-                          ]
-                        ]
-                      )
-                    ),
-                    if (banners.length > 1)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(banners.length, (index) {
-                            return Container(
-                              width: 8, height: 8,
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: _currentRealIndex == index ? AppColors.accent : Colors.white24)
-                            );
-                          }
+                                  );
+                                }
+                              ),
+                              if (banners.length > 1) ...[
+                                Positioned(left: 0, child: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white24), onPressed: () => _scrollBanner(-1))),
+                                Positioned(right: 0, child: IconButton(icon: const Icon(Icons.arrow_forward_ios, color: Colors.white24), onPressed: () => _scrollBanner(1)))
+                              ]
+                            ]
+                          )
+                        ),
+                        if (banners.length > 1)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(banners.length, (index) {
+                                return Container(
+                                  width: 8, height: 8,
+                                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                                  decoration: BoxDecoration(shape: BoxShape.circle, color: _currentRealIndex == index ? AppColors.accent : Colors.white24)
+                                );
+                              }
+                            )
+                          )
                         )
-                      )
+                      ]
                     )
-                  ]
+              ),
+
+              // --- RESULTS SECTION (Responsive) ---
+              if (pullResults.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Divider(color: Colors.white10),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double w = constraints.maxWidth;
+                    
+                    // Breakpoint Logic:
+                    // > 600px: 10 items
+                    // 400px - 600px: 5 items
+                    // < 400px: 2 items
+                    int cols;
+                    if (w >= 600) {
+                      cols = 10;
+                    } else if (w >= 400) {
+                      cols = 5;
+                    } else {
+                      cols = 2;
+                    }
+
+                    // Calculate precise width to fill row
+                    final double itemWidth = (w / cols).floorToDouble(); 
+                    final double itemHeight = itemWidth / 0.7; // Maintain aspect ratio
+
+                    return Container(
+                      width: w,
+                      alignment: Alignment.center,
+                      child: Wrap(
+                        alignment: WrapAlignment.center, 
+                        spacing: 0,
+                        runSpacing: 8,
+                        children: pullResults.map((hero) {
+                          return SizedBox(
+                            width: itemWidth,
+                            height: itemHeight,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2.0), 
+                              child: FittedBox(
+                                fit: BoxFit.contain,
+                                child: SizedBox(
+                                  width: 130, // Native HeroCard width
+                                  height: 185, 
+                                  child: HeroCard(
+                                    data: hero,
+                                    onRename: _renameHero,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white10),
+
+              // --- STORE SECTION (Responsive Scale) ---
+              _buildStoreSection(),
+              const SizedBox(height: 40),
+            ]
+          )
+        ),
+
+        // --- ANIMATION OVERLAY ---
+        if (_currentOverlayHero != null) 
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _showNextOverlay,
+              child: Container(
+                color: Colors.black.withOpacity(0.9),
+                alignment: Alignment.center,
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RarityText(
+                        AppColors.getRarityLabel(_currentOverlayHero!['rarity']), 
+                        rarity: _currentOverlayHero!['rarity'],
+                        fontSize: 28,
+                      ),
+                      const SizedBox(height: 30),
+                      
+                      RarityContainer(
+                        rarity: _currentOverlayHero!['rarity'],
+                        width: 206, 
+                        height: 291,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(3.0),
+                          child: HeroCard(data: _currentOverlayHero!, onRename: (a,b){})
+                        ), 
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      const Text("Tap to Continue", style: TextStyle(color: Colors.white54))
+                    ]
+                  )
                 )
-          ),
-          // Pull Results
-          Padding(padding: const EdgeInsets.all(16), child: HeroGrid(heroes: pullResults, onRename: _renameHero))
-        ]
-      )
+              )
+            )
+          )
+      ]
+    );
+  }
+
+  Widget _buildStoreSection() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        int crossAxisCount;
+        final double w = constraints.maxWidth;
+        if (w >= 1000) {
+          crossAxisCount = 8;
+        } else if (w >= 500) {
+          crossAxisCount = 4;
+        } else {
+          crossAxisCount = 2;
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: 0.85,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: _storeItems.length,
+              itemBuilder: (ctx, i) {
+                final item = _storeItems[i];
+                return Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white10)
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(AppIcons.gem, color: item['color'], size: 36),
+                      const SizedBox(height: 8),
+                      Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text("${item['gems']} Gems", style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
+                        child: Text(item['price'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))
+                      )
+                    ],
+                  ),
+                );
+              }
+            ),
+          ],
+        );
+      }
     );
   }
 }
