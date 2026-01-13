@@ -300,7 +300,6 @@ class LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
-  // Legacy Drop Logic (1-on-1)
   void _onHeroDroppedOnHero(String fromCid, String toCid) {
     if (fromCid == toCid) return;
     final fromHero = roster.firstWhere((h) => h['cid'] == fromCid, orElse: () => null);
@@ -648,10 +647,7 @@ class LobbyScreenState extends State<LobbyScreen> {
           alignment: Alignment.center,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            // The Visual Indicator (Smaller than the touch area)
             height: isVertical ? 16 : 24, 
-            // In horizontal mode, width flexes (via Expanded parent) minus margin. 
-            // In vertical mode, fixed width to look like a stack.
             width: isVertical ? 28 : null, 
             margin: isVertical ? null : const EdgeInsets.symmetric(horizontal: 4),
             
@@ -712,7 +708,6 @@ class LobbyScreenState extends State<LobbyScreen> {
           ),
 
         const SizedBox(height: 16),
-        // Roster header with Synthesis indicator
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -744,7 +739,6 @@ class LobbyScreenState extends State<LobbyScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : Stack(
                   children: [
-                    // The Scrollable Grid
                     CustomScrollView(
                       controller: _rosterScrollController,
                       slivers: [
@@ -801,12 +795,10 @@ class LobbyScreenState extends State<LobbyScreen> {
                             ),
                           ),
                         ),
-                        // Add padding at bottom so last row isn't covered by overlay buttons
                         const SliverPadding(padding: EdgeInsets.only(bottom: 60)),
                       ],
                     ),
 
-                    // The Floating Page Selector Overlay
                     if ((_totalHeroes > 0 || _currentPage > 1) && _autoSelectLevel == 0)
                       Positioned(
                         bottom: 16,
@@ -1103,7 +1095,6 @@ class _InteractiveDraggableHeroState extends State<_InteractiveDraggableHero> {
 
   @override
   Widget build(BuildContext context) {
-    // If Synthesis Mode is ON, we disable dragging and use Tap/DoubleTap gestures
     if (widget.isSynthesisMode) {
       return GestureDetector(
         onTap: widget.onSynthesisTap,
@@ -1129,7 +1120,6 @@ class _InteractiveDraggableHeroState extends State<_InteractiveDraggableHero> {
       );
     }
 
-    // Standard Drag and Drop Mode
     return DragTarget<String>(
       onWillAccept: (fromCid) => fromCid != widget.cid,
       onAccept: (fromCid) => widget.onDropAccept(fromCid, widget.cid),

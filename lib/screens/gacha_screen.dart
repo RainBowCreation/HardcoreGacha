@@ -5,7 +5,12 @@ import '../core/api.dart';
 import '../widgets/hero_card.dart';
 
 class GachaScreen extends StatefulWidget {
-  const GachaScreen({super.key});
+  final Map<String, dynamic>? playerData; 
+
+  const GachaScreen({
+    super.key, 
+    this.playerData
+  });
 
   @override
   State<GachaScreen> createState() => _GachaScreenState();
@@ -32,11 +37,12 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
   late Animation<double> _scaleAnimation;
 
   final List<Map<String, dynamic>> _storeItems = List.generate(8, (index) => {
-    "name": "Pack ${index + 1}",
-    "price": "\$${(index + 1) * 4 + 0.99}",
-    "gems": (index + 1) * 500,
-    "color": Colors.primaries[index % Colors.primaries.length],
-  });
+      "name": "Pack ${index + 1}",
+      "price": "\$${(index + 1) * 4 + 0.99}",
+      "gems": (index + 1) * 500,
+      "color": Colors.primaries[index % Colors.primaries.length]
+    }
+  );
 
   @override
   void initState() {
@@ -61,7 +67,22 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
     super.dispose();
   }
 
-  // --- Original Banner Logic (Strictly Preserved) ---
+  // --- Helper to calculate remaining pulls for guarantee ---
+  int _getRemainingPity(String bannerId) {
+    if (widget.playerData == null || widget.playerData!['statistic'] == null) {
+      return 60; // Default if no stats found
+    }
+
+    final stats = widget.playerData!['statistic'];
+    final key = 'pull.$bannerId.wo.6';
+
+    final int currentPity = int.tryParse(stats[key]?.toString() ?? "0") ?? 0;
+
+    final int remaining = 60 - currentPity;
+
+    return remaining > 0 ? remaining : 0;
+  }
+
   Future<void> _loadBanners({bool silent = false}) async {
     if (bannersLoading) return;
     if (!silent) setState(() => bannersLoading = true);
@@ -154,9 +175,10 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
         if (res['data'] != null && res['data']['result'] != null) {
           final results = res['data']['result'] as List;
           setState(() {
-            pullResults = results;
-            _overlayQueue = results.where((h) => (h['rarity'] ?? 0) >= 6).toList();
-          });
+              pullResults = results;
+              _overlayQueue = results.where((h) => (h['rarity'] ?? 0) >= 6).toList();
+            }
+          );
           if (_overlayQueue.isNotEmpty) {
             _showNextOverlay();
           }
@@ -185,13 +207,16 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
   void _showNextOverlay() {
     if (_overlayQueue.isNotEmpty) {
       setState(() {
-        _currentOverlayHero = _overlayQueue.removeAt(0);
-      });
+          _currentOverlayHero = _overlayQueue.removeAt(0);
+        }
+      );
       _overlayController.forward(from: 0.0);
-    } else {
+    }
+    else {
       setState(() {
-        _currentOverlayHero = null;
-      });
+          _currentOverlayHero = null;
+        }
+      );
     }
   }
 
@@ -209,7 +234,8 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
     final Map<String, dynamic> currency = bannerData['currency'] ?? {};
     if (currency.containsKey('gem')) {
       return {'cost': currency['gem'] ?? 0, 'icon': AppIcons.gem, 'color': AppColors.gem, 'type': 'Gem'};
-    } else {
+    }
+    else {
       return {'cost': currency['coin'] ?? 0, 'icon': AppIcons.coin, 'color': AppColors.coin, 'type': 'Coin'};
     }
   }
@@ -260,7 +286,6 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
           child: Column(
             children: [
               const SizedBox(height: 16),
-              
               // --- ORIGINAL BANNER UI ---
               SizedBox(
                 height: 260, 
@@ -285,6 +310,8 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
                                   final active = index == _currentRealIndex;
                                   final currDetails = _getCurrencyDetails(b);
                                   final int baseCost = currDetails['cost'];
+                                  // Get Guarantee Count
+                                  final int guaranteeLeft = _getRemainingPity(b['id']);
 
                                   return AnimatedScale(
                                     scale: active ? 1.0 : 0.9, 
@@ -314,11 +341,31 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
                                             children: [
                                               Text(b['name'] ?? "Unknown", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: active ? Colors.white : Colors.grey)),
                                               const SizedBox(height: 8),
-                                              Text(
-                                                b['end'] != null ? "Ends: ${b['end']}" : "No Time Limit", 
-                                                style: TextStyle(fontSize: 12, color: b['end'] != null ? Colors.redAccent : Colors.greenAccent)
+                                              if (b['end'] != null) ...[
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  "Ends: ${b['end']}", 
+                                                  style: const TextStyle(fontSize: 12, color: Colors.redAccent)
+                                                )
+                                              ],
+                                              const SizedBox(height: 12),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black26,
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  border: Border.all(color: Colors.white12)
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.star, color: Colors.amber, size: 14),
+                                                    const SizedBox(width: 4),
+                                                    RarityText("Guaranteed ${AppColors.getRarityLabel(6)} in $guaranteeLeft", rarity: 6)
+                                                  ]
+                                                )
                                               ),
-                                              const SizedBox(height: 24),
+                                              const SizedBox(height: 12), // Adjusted spacing
                                               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                                                   ElevatedButton(
                                                     style: ElevatedButton.styleFrom(
@@ -392,30 +439,25 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
                     )
               ),
 
-              // --- RESULTS SECTION (Responsive) ---
+              // --- RESULTS SECTION ---
               if (pullResults.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 const Divider(color: Colors.white10),
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final double w = constraints.maxWidth;
-                    
-                    // Breakpoint Logic:
-                    // > 600px: 10 items
-                    // 400px - 600px: 5 items
-                    // < 400px: 2 items
                     int cols;
                     if (w >= 600) {
                       cols = 10;
-                    } else if (w >= 400) {
+                    }
+                    else if (w >= 400) {
                       cols = 5;
-                    } else {
+                    }
+                    else {
                       cols = 2;
                     }
-
-                    // Calculate precise width to fill row
                     final double itemWidth = (w / cols).floorToDouble(); 
-                    final double itemHeight = itemWidth / 0.7; // Maintain aspect ratio
+                    final double itemHeight = itemWidth / 0.7;
 
                     return Container(
                       width: w,
@@ -425,79 +467,80 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
                         spacing: 0,
                         runSpacing: 8,
                         children: pullResults.map((hero) {
-                          return SizedBox(
-                            width: itemWidth,
-                            height: itemHeight,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2.0), 
-                              child: FittedBox(
-                                fit: BoxFit.contain,
-                                child: SizedBox(
-                                  width: 130, // Native HeroCard width
-                                  height: 185, 
-                                  child: HeroCard(
-                                    data: hero,
-                                    onRename: _renameHero,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
+                            return SizedBox(
+                              width: itemWidth,
+                              height: itemHeight,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 2.0), 
+                                child: FittedBox(
+                                  fit: BoxFit.contain,
+                                  child: SizedBox(
+                                    width: 130, 
+                                    height: 185, 
+                                    child: HeroCard(
+                                      data: hero,
+                                      onRename: _renameHero
+                                    )
+                                  )
+                                )
+                              )
+                            );
+                          }
+                        ).toList()
+                      )
                     );
-                  },
-                ),
+                  }
+                )
               ],
               const SizedBox(height: 16),
               const Divider(color: Colors.white10),
-
-              // --- STORE SECTION (Responsive Scale) ---
               _buildStoreSection(),
-              const SizedBox(height: 40),
+              const SizedBox(height: 40)
             ]
           )
         ),
 
         // --- ANIMATION OVERLAY ---
         if (_currentOverlayHero != null) 
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: _showNextOverlay,
-              child: Container(
-                color: Colors.black.withOpacity(0.9),
-                alignment: Alignment.center,
-                child: ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      RarityText(
-                        AppColors.getRarityLabel(_currentOverlayHero!['rarity']), 
-                        rarity: _currentOverlayHero!['rarity'],
-                        fontSize: 28,
-                      ),
-                      const SizedBox(height: 30),
-                      
-                      RarityContainer(
-                        rarity: _currentOverlayHero!['rarity'],
-                        width: 206, 
-                        height: 291,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(3.0),
-                          child: HeroCard(data: _currentOverlayHero!, onRename: (a,b){})
-                        ), 
-                      ),
-                      
-                      const SizedBox(height: 20),
-                      const Text("Tap to Continue", style: TextStyle(color: Colors.white54))
-                    ]
-                  )
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: _showNextOverlay,
+            child: Container(
+              color: Colors.black.withOpacity(0.9),
+              alignment: Alignment.center,
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RarityText(
+                      AppColors.getRarityLabel(_currentOverlayHero!['rarity']), 
+                      rarity: _currentOverlayHero!['rarity'],
+                      fontSize: 28
+                    ),
+                    const SizedBox(height: 30),
+
+                    RarityContainer(
+                      rarity: _currentOverlayHero!['rarity'],
+                      width: 206, 
+                      height: 291,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(3.0),
+                        child: HeroCard(data: _currentOverlayHero!, onRename: (a, b) {
+                          }
+                        )
+                      ) 
+                    ),
+
+                    const SizedBox(height: 20),
+                    const Text("Tap to Continue", style: TextStyle(color: Colors.white54))
+                  ]
                 )
               )
             )
           )
+        )
       ]
     );
   }
@@ -509,9 +552,11 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
         final double w = constraints.maxWidth;
         if (w >= 1000) {
           crossAxisCount = 8;
-        } else if (w >= 500) {
+        }
+        else if (w >= 500) {
           crossAxisCount = 4;
-        } else {
+        }
+        else {
           crossAxisCount = 2;
         }
 
@@ -526,7 +571,7 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
                 crossAxisCount: crossAxisCount,
                 childAspectRatio: 0.85,
                 crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
+                mainAxisSpacing: 12
               ),
               itemCount: _storeItems.length,
               itemBuilder: (ctx, i) {
@@ -550,12 +595,12 @@ class _GachaScreenState extends State<GachaScreen> with TickerProviderStateMixin
                         decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
                         child: Text(item['price'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))
                       )
-                    ],
-                  ),
+                    ]
+                  )
                 );
               }
-            ),
-          ],
+            )
+          ]
         );
       }
     );

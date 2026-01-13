@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-const String API_ROOT = "http://sea.main.rainbowcreation.net:8080";
+const String API_ROOT = "http://localhost:8080";
 const String API_BASE = "$API_ROOT/v1";
 
 class AppColors {
@@ -13,7 +13,7 @@ class AppColors {
   static const gem = Color(0xFF4DD0E1);
   static const coin = Color(0xFFFFD54F);
 
-  // 1. Solid Colors (Fallback)
+  // Solid Colors
   static Color getRarityColor(int rarity) {
     switch (rarity) {
       case 1: return const Color(0xFF9E9E9E); // COMMON: Grey
@@ -22,8 +22,7 @@ class AppColors {
       case 4: return const Color(0xFF9C27B0); // EPIC: Purple
       case 5: return const Color(0xFFFFC107); // LEGENDARY: Gold
       case 6: return const Color(0xFFFF5252); // MYTHIC: Red
-      
-      // High Tiers (Swapped)
+      // High Tiers
       case 7: return const Color(0xFFD500F9); // ANCIENT: Neon Pink (Void/Magic)
       case 8: return const Color(0xFF00E5FF); // DIVINE: Cyan (Holy/Light)
       case 9: return const Color(0xFFFFFFFF); // UNIQUE: White (Rainbow Base)
@@ -31,7 +30,7 @@ class AppColors {
     }
   }
 
-  // 2. Gradients (High Tiers)
+  // Gradients (High Tiers)
   static Gradient? getGradient(int rarity) {
     switch (rarity) {
       // --- Standard Fades ---
@@ -47,31 +46,24 @@ class AppColors {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         );
-
-      // --- NEW HIGH TIERS ---
-      
       case 7: // ANCIENT (Pink -> Deep Purple)
-              // Gives a "Forbidden Magic" or "Void" feel
         return const LinearGradient(
           colors: [
-            Color(0xFFD500F9), // Neon Pink
-            Color(0xFF651FFF), // Deep Purple
+            Color(0xFFD500F9),
+            Color(0xFF651FFF),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         );
-
       case 8: // DIVINE (Cyan -> White)
-              // Gives a "Holy", "Diamond", or "Heavenly" feel
         return const LinearGradient(
           colors: [
-            Color(0xFF00E5FF), // Cyan Accent
-            Color(0xFFE0F7FA), // White/Pale Cyan
+            Color(0xFF00E5FF),
+            Color(0xFFE0F7FA),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         );
-
       // --- UNIQUE ---
       case 9: // UNIQUE: Rainbow Spectrum
         return const LinearGradient(

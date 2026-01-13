@@ -305,7 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 1. Name & Tower Badge Row
+                      // Name & Tower Badge Row
                       Row(
                         children: [
                           if (towerFloor > 10) ...[
@@ -338,7 +338,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 4),
 
-                      // 2. Email & Verification Button
+                      // Email & Verification Button
                       if (email.isNotEmpty)
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
@@ -378,7 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 6),
 
-                      // 3. User ID Badge
+                      // User ID Badge
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
@@ -392,7 +392,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const Divider(color: Colors.white10, height: 1),
                       const SizedBox(height: 12),
 
-                      // 4. Member Since / Last Seen
+                      // Member Since / Last Seen
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [

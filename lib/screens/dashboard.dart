@@ -226,7 +226,7 @@ class _MainDashboardState extends State<MainDashboard> {
           IndexedStack(
             index: _viewIndex,
             children: [
-              const GachaScreen(),
+              GachaScreen(playerData: playerData),
               LobbyScreen(key: _lobbyKey),
               ProfileScreen(
                 playerData: playerData, 

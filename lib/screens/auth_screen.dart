@@ -113,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> submit() async {
     if (loading) return;
     
-    // 2. Validation Logic
+    // Validation Logic
     if (isRegister) {
       if (!isValidEmail(_emailController.text.trim())) {
         if (mounted) {
@@ -244,8 +244,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   border: OutlineInputBorder()
                 )
               ),
-              
-              // 3. New Confirm Password Field
               if (isRegister) ...[
                 const SizedBox(height: 12),
                 TextField(

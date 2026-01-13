@@ -42,7 +42,7 @@ class ChatMessage {
 }
 
 class ChatChannel {
-  final String id;   // This acts as the 'gid' or channel identifier
+  final String id; 
   final String name;
   final String type; // 'SERVER', 'LOCAL', 'GROUP', 'P2P'
   final List<ChatMessage> messages = [];
@@ -95,17 +95,11 @@ class ChatService extends ChangeNotifier {
   void _onConnect(StompFrame frame) {
     isConnected = true;
     notifyListeners();
-
-    // Subscribe to Static Channels
     _subscribe('/topic/server', 'server');
     _subscribe('/topic/local', 'local');
-    
-    // Fetch and Resubscribe to user's joined groups from Backend
     _restoreJoinedGroups();
   }
 
-  /// Fetches the list of Group IDs the user is part of from GET /chat
-  /// Then calls joinGroup(id) to get the name and subscribe.
   Future<void> _restoreJoinedGroups() async {
     try {
       final res = await Api.request("/chat");
@@ -159,7 +153,6 @@ class ChatService extends ChangeNotifier {
     } else if (targetId == 'p2p') {
       destination = '/app/chat.p2p'; 
     } else {
-      // It's a Group (gid)
       destination = '/app/chat.group.$targetId';
     }
 
